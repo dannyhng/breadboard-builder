@@ -107,6 +107,8 @@
   var drag = null;
   var nets = null;
   var history = [], future = [];
+  var view = { x: 0, y: 0, w: dims.width, h: dims.height + ARD_H };
+  var pointers = {}, pan = null, pinch = null, spaceDown = false;
 
   // ---------- geometry helpers ----------
   function byId(id) { for (var i = 0; i < state.parts.length; i++) if (state.parts[i].id === id) return state.parts[i]; return null; }
@@ -152,11 +154,46 @@
     var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.min(70, Math.abs(x2 - x1) * 0.3 + 22);
     return 'M ' + x1 + ' ' + y1 + ' Q ' + mx + ' ' + my + ' ' + x2 + ' ' + y2;
   }
-  function toBoard(evt) {
-    var p = svg.createSVGPoint(); p.x = evt.clientX; p.y = evt.clientY;
+  function screenToBoard(cx, cy) {
+    var p = svg.createSVGPoint(); p.x = cx; p.y = cy;
     var m = svg.getScreenCTM(); if (!m) return { x: 0, y: 0 };
     var b = p.matrixTransform(m.inverse());
     return { x: b.x, y: b.y };
+  }
+  function toBoard(evt) { return screenToBoard(evt.clientX, evt.clientY); }
+
+  // ---------- zoom / pan (viewBox; toBoard reads the live CTM so snapping stays correct) ----------
+  function applyView() { svg.setAttribute('viewBox', view.x + ' ' + view.y + ' ' + view.w + ' ' + view.h); }
+  function clampW(w) { return Math.max(dims.width * 0.22, Math.min(dims.width * 1.7, w)); }
+  function zoomAt(bx, by, factor) {
+    var nw = clampW(view.w * factor), k = nw / view.w, nh = view.h * k;
+    var fx = (bx - view.x) / view.w, fy = (by - view.y) / view.h;
+    view.w = nw; view.h = nh; view.x = bx - fx * nw; view.y = by - fy * nh; applyView();
+  }
+  function fitView() { view.x = 0; view.y = 0; view.w = dims.width; view.h = dims.height + ARD_H; applyView(); }
+  function doPan(e) {
+    if (!pan) return;
+    var rect = svg.getBoundingClientRect();
+    view.x = pan.vx - (e.clientX - pan.sx) * (view.w / rect.width);
+    view.y = pan.vy - (e.clientY - pan.sy) * (view.h / rect.height);
+    applyView();
+  }
+  function pinchPair() { var ids = Object.keys(pointers); return [pointers[ids[0]], pointers[ids[1]]]; }
+  function startPinch() {
+    var p = pinchPair(); if (!p[0] || !p[1]) return;
+    var mx = (p[0].x + p[1].x) / 2, my = (p[0].y + p[1].y) / 2, b = screenToBoard(mx, my);
+    pinch = { d0: Math.max(1, Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y)), bx: b.x, by: b.y, vw: view.w, vh: view.h };
+  }
+  function doPinch() {
+    if (!pinch) return; var p = pinchPair(); if (!p[0] || !p[1]) return;
+    var mx = (p[0].x + p[1].x) / 2, my = (p[0].y + p[1].y) / 2;
+    var d = Math.max(1, Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y));
+    var nw = clampW(pinch.vw * (pinch.d0 / d)), nh = pinch.vh * (nw / pinch.vw);
+    var rect = svg.getBoundingClientRect();
+    view.w = nw; view.h = nh;
+    view.x = pinch.bx - ((mx - rect.left) / rect.width) * nw;
+    view.y = pinch.by - ((my - rect.top) / rect.height) * nh;
+    applyView();
   }
   function drawPartInto(parent, type, legHoles, opts, extraAttrs) {
     var h0 = holesById[legHoles[0]], h1 = holesById[legHoles[1]];
@@ -298,6 +335,9 @@
 
   // ---------- events ----------
   svg.addEventListener('pointermove', function (e) {
+    if (pointers[e.pointerId]) { pointers[e.pointerId].x = e.clientX; pointers[e.pointerId].y = e.clientY; }
+    if (pinch) { doPinch(); return; }
+    if (pan) { doPan(e); return; }
     lastPointer = toBoard(e);
     if (state.placing || state.wireDraft) { render(); return; }
     if (drag) {
@@ -316,6 +356,9 @@
   });
 
   svg.addEventListener('pointerdown', function (e) {
+    pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
+    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; drag = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
+    if (spaceDown || e.button === 1) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; document.body.classList.add('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); return; }
     lastPointer = toBoard(e);
     if (state.placing || state.tool === 'wire') return;
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
@@ -331,12 +374,26 @@
     state.sel = null; render();
   });
 
-  window.addEventListener('pointerup', function () {
+  window.addEventListener('pointerup', function (e) {
+    delete pointers[e.pointerId];
+    if (pinch && Object.keys(pointers).length < 2) pinch = null;
+    if (pan) { pan = null; document.body.classList.remove('panning'); }
     if (drag) {
       if (drag.moved) { try { history.push(drag.before); if (history.length > 120) history.shift(); future.length = 0; } catch (_) {} updateUndoButtons(); save(); }
       drag = null;
     }
   });
+  window.addEventListener('pointercancel', function (e) {
+    delete pointers[e.pointerId];
+    pinch = null; drag = null;
+    if (pan) { pan = null; document.body.classList.remove('panning'); }
+  });
+  svg.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    var pt = toBoard(e);
+    zoomAt(pt.x, pt.y, e.deltaY < 0 ? 0.86 : 1.16);
+  }, { passive: false });
+  window.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Spacebar') spaceDown = false; });
 
   svg.addEventListener('pointerleave', function () {
     if (state.hoverNode != null) { state.hoverNode = null; render(); }
@@ -373,6 +430,8 @@
     var k = e.key;
     if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
     if ((e.ctrlKey || e.metaKey) && (k === 'y' || k === 'Y')) { redo(); e.preventDefault(); return; }
+    if (k === ' ' || k === 'Spacebar') { spaceDown = true; if (e.target === document.body) e.preventDefault(); return; }
+    if (k === '0') { fitView(); return; }
     if (k === 'Escape') { state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return; }
     if (k === 'r' || k === 'R') {
       if (state.placing) { state.placing.rot = (state.placing.rot + 1) % 4; render(); e.preventDefault(); return; }
@@ -411,6 +470,7 @@
     else if (act === 'place') { state.tool = 'select'; state.wireDraft = null; state.placing = { type: b.getAttribute('data-part'), rot: 0 }; document.body.classList.add('placing'); setActiveEl(b); }
     else if (act === 'undo') { undo(); return; }
     else if (act === 'redo') { redo(); return; }
+    else if (act === 'fit') { fitView(); return; }
     else if (act === 'export') exportJSON();
     else if (act === 'import') document.getElementById('file').click();
     else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); } }
@@ -490,6 +550,7 @@
 
   if (!loadSaved()) seedDemo();
   setActiveAction('select');
+  applyView();
   render();
   updateUndoButtons();
 })();

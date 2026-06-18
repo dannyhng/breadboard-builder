@@ -47,11 +47,12 @@ underserves and the simulators treat as secondary.
 
 ## Premium roadmap (ranked)
 
-**P0 - the line between "toy" and "tool" (do first):**
-1. Undo / redo. The single feature that most separates a tool from a toy.
-2. Zoom + pan. Also the unlock for usable mobile (the holes are sub-finger now).
+**P0 - the line between "toy" and "tool":**
+1. Undo / redo. SHIPPED (keyboard + buttons).
+2. Zoom + pan. SHIPPED (scroll to zoom, space/middle-drag pan, pinch on touch,
+   Fit to reset). This is also the mobile unlock.
 3. Smooth drag: move only the dragged element per frame, commit on drop (no full
-   re-render per mousemove).
+   re-render per mousemove). NEXT.
 
 **P1 - depth:**
 4. Inspector panel: select a part, edit its value. Resistor ohms (with correct

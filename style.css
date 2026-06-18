@@ -56,6 +56,7 @@ main { padding: 16px; overflow: auto; }
 }
 
 body.placing #board { cursor: copy; }
+body.panning #board { cursor: grabbing; }
 
 .checks {
   margin: 6px 16px 0;

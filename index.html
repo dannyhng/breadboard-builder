@@ -22,6 +22,7 @@
     <div class="group">
       <button data-action="undo" title="Undo (Ctrl+Z)" disabled>Undo</button>
       <button data-action="redo" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button>
+      <button data-action="fit" title="Fit view (0)">Fit</button>
     </div>
     <div class="group">
       <button data-action="export" title="Download layout as JSON">Export</button>
@@ -32,7 +33,7 @@
     <input type="file" id="file" accept="application/json" hidden>
   </header>
 
-  <p class="hint" id="hint">Tip: click <b>LED</b> or <b>Resistor</b>, then click the board to place it. Press <b>R</b> to rotate. Use <b>Wire</b> to connect two holes. <b>Hover any hole</b> to light up everything it's electrically connected to. Click a part or wire and press <b>Delete</b> to remove it. Everything autosaves.</p>
+  <p class="hint" id="hint">Tip: click <b>LED</b> or <b>Resistor</b>, then click the board to place it. Press <b>R</b> to rotate. Use <b>Wire</b> to connect two holes. <b>Hover any hole</b> to light up everything it's electrically connected to. <b>Scroll</b> to zoom, hold <b>Space</b> (or pinch on a touch screen) to pan, <b>0</b> or Fit to reset. Click a part or wire and press <b>Delete</b> to remove it. Everything autosaves.</p>
   <div id="checks" class="checks">Checks: no electrical issues</div>
 
   <main>
