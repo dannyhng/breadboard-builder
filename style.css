@@ -127,10 +127,11 @@ body.wiring #board { cursor: crosshair; }
 .insp-empty { color: var(--text-3); font-size: 12px; font-style: italic; }
 .inspector-body .insp-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
 .inspector-body label { display: block; font-size: 11px; color: var(--text-3); margin: 8px 0 3px; }
-.inspector-body select {
+.inspector-body select, .inspector-body input[type="text"] {
   width: 100%; font-size: 13px; padding: 5px 6px; border-radius: 5px;
   background: var(--surface-2); color: var(--text-1); border: 1px solid var(--border);
 }
+.inspector-body input[type="text"]:focus { outline: none; border-color: var(--accent); }
 .inspector-body button {
   margin-top: 8px; font-size: 12px; padding: 5px 10px; border-radius: 5px;
   border: 1px solid var(--border); background: var(--surface-2); color: var(--text-1); cursor: pointer;

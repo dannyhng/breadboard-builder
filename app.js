@@ -218,22 +218,36 @@
   function occupied(holeId, exceptId) {
     return state.parts.some(function (p) { return p.id !== exceptId && p.legHoles.indexOf(holeId) >= 0; });
   }
+  function rotOffset(dc, dr, rot) {
+    if (rot === 1) return { dc: -dr, dr: dc };
+    if (rot === 2) return { dc: -dc, dr: -dr };
+    if (rot === 3) return { dc: dr, dr: -dc };
+    return { dc: dc, dr: dr };
+  }
   function deriveLegs(type, anchorHole, rot) {
     if (!anchorHole || anchorHole.rail) return null;
-    var span = PARTS[type].span, dc = 0, dr = 0;
-    if (rot === 0) dc = span; else if (rot === 2) dc = -span;
-    else if (rot === 1) dr = span; else if (rot === 3) dr = -span;
-    var ri = ROWS.indexOf(anchorHole.row) + dr;
-    if (ri < 0 || ri >= ROWS.length) return null;
-    var h2 = holeByCR(anchorHole.col + dc, ROWS[ri]);
-    if (!h2) return null;
-    return [anchorHole.id, h2.id];
+    var legs = PARTS[type].legs, out = [];
+    for (var i = 0; i < legs.length; i++) {
+      var o = rotOffset(legs[i].dc, legs[i].dr, rot);
+      var ri = ROWS.indexOf(anchorHole.row) + o.dr;
+      if (ri < 0 || ri >= ROWS.length) return null;
+      var h = holeByCR(anchorHole.col + o.dc, ROWS[ri]);
+      if (!h) return null;
+      out.push(h.id);
+    }
+    return out;
   }
   function validLegs(type, anchorHole, rot, exceptId) {
     var legs = deriveLegs(type, anchorHole, rot);
     if (!legs) return null;
-    if (occupied(legs[0], exceptId) || occupied(legs[1], exceptId)) return null;
+    for (var i = 0; i < legs.length; i++) if (occupied(legs[i], exceptId)) return null;
     return legs;
+  }
+  function nextLabel(type) {
+    var pre = (PARTS[type] && PARTS[type].prefix) || 'P', used = {};
+    state.parts.forEach(function (p) { if (p.label) used[p.label] = true; });
+    var n = 1; while (used[pre + n]) n++;
+    return pre + n;
   }
   function wirePath(x1, y1, x2, y2) {
     var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.min(70, Math.abs(x2 - x1) * 0.3 + 22);
@@ -284,15 +298,20 @@
     applyView();
   }
   function drawPartInto(parent, type, legHoles, opts, extraAttrs) {
-    var h0 = holesById[legHoles[0]], h1 = holesById[legHoles[1]];
-    if (!h0 || !h1) return null;
-    var dx = h1.x - h0.x, dy = h1.y - h0.y;
-    var len = Math.sqrt(dx * dx + dy * dy);
-    var ang = Math.atan2(dy, dx) * 180 / Math.PI;
-    var attrs = Object.assign({ transform: 'translate(' + h0.x + ' ' + h0.y + ') rotate(' + ang + ')' }, extraAttrs || {});
-    var g = E('g', attrs, parent);
-    PARTS[type].draw(function (n, a) { return E(n, a, g); }, len, opts || {});
-    return g;
+    var def = PARTS[type];
+    var coords = legHoles.map(function (id) { return holesById[id]; });
+    for (var i = 0; i < coords.length; i++) if (!coords[i]) return null;
+    if (def.axis) {
+      var h0 = coords[0], h1 = coords[1];
+      var dx = h1.x - h0.x, dy = h1.y - h0.y;
+      var len = Math.sqrt(dx * dx + dy * dy), ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      var g = E('g', Object.assign({ transform: 'translate(' + h0.x + ' ' + h0.y + ') rotate(' + ang + ')' }, extraAttrs || {}), parent);
+      def.draw(function (n, a) { return E(n, a, g); }, len, opts || {});
+      return g;
+    }
+    var g2 = E('g', extraAttrs || {}, parent);
+    def.draw(function (n, a) { return E(n, a, g2); }, coords, opts || {});
+    return g2;
   }
 
   // ---------- electrical nets (union-find over nodes + arduino pins) ----------
@@ -320,8 +339,9 @@
     var rm = [find('rail-top-minus'), find('rail-bot-minus')];
     if (rp.some(function (a) { return rm.indexOf(a) >= 0; })) issues.push('Power rails are shorted (+ tied to -).');
     state.parts.forEach(function (p) {
+      if (p.legHoles.length !== 2) return;
       var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
-      if (h0 && h1 && h0.node === h1.node) issues.push(PARTS[p.type].label + ' is shorted (both legs on the same strip).');
+      if (h0 && h1 && h0.node === h1.node) issues.push((PARTS[p.type] ? PARTS[p.type].label : p.type) + ' is shorted (both legs on the same strip).');
     });
 
     // LED polarity / missing-resistor checks. Supply = + rails and 5V; ground =
@@ -349,9 +369,7 @@
     var netCount = {};
     function bumpNet(root) { netCount[root] = (netCount[root] || 0) + 1; }
     state.parts.forEach(function (p) {
-      var a = holesById[p.legHoles[0]], c = holesById[p.legHoles[1]];
-      if (a) bumpNet(find(a.node));
-      if (c) bumpNet(find(c.node));
+      p.legHoles.forEach(function (hid) { var h = holesById[hid]; if (h) bumpNet(find(h.node)); });
     });
     state.wires.forEach(function (w) {
       if (ardPins[w.from]) bumpNet(find(w.from));
@@ -418,11 +436,18 @@
             fill: 'none', stroke: '#3aa0ff', 'stroke-width': 1.5, 'stroke-dasharray': '5 3' }, g);
         } catch (_) {}
       }
-      [p.legHoles[0], p.legHoles[1]].forEach(function (hid) {
+      p.legHoles.forEach(function (hid) {
         var hh = holesById[hid]; if (!hh) return;
         var connected = (nets.netCount[nets.holeNet[hid]] || 0) >= 2;
         E('circle', { cx: hh.x, cy: hh.y, r: 3.3, fill: connected ? '#3fb950' : '#f85149', stroke: '#00000055', 'stroke-width': 0.5, 'pointer-events': 'none' }, partLayer);
       });
+      if (p.label && g) {
+        try {
+          var lb = g.getBBox();
+          var tt = E('text', { x: lb.x + lb.width / 2, y: lb.y - 5, 'text-anchor': 'middle', 'font-size': 10, 'font-family': 'ui-monospace, Menlo, monospace', fill: '#6c7682', 'pointer-events': 'none' }, partLayer);
+          tt.textContent = p.label;
+        } catch (_) {}
+      }
     });
 
     if (state.placing) {
@@ -472,6 +497,7 @@
     _inspSig = sig;
     if (!p) { el.innerHTML = '<div class="insp-empty">Select a part to edit its value.</div>'; return; }
     var h = '<div class="insp-title">' + PARTS[p.type].label + '</div>';
+    h += '<label>Name</label><input data-insp="label" type="text" value="' + (p.label || '') + '" maxlength="10">';
     if (p.type === 'resistor') {
       h += '<label>Resistance</label><select data-insp="value">';
       window.RES_VALUES.forEach(function (o) { h += '<option value="' + o.v + '"' + (o.v === (p.value || '220') ? ' selected' : '') + '>' + o.v + ' Ω</option>'; });
@@ -561,6 +587,7 @@
         pushHistory();
         var np = { id: state.nextId++, type: state.placing.type, anchor: legs[0], rot: state.placing.rot, legHoles: legs };
         var dd = PARTS[state.placing.type].defaults; if (dd) for (var dk in dd) np[dk] = dd[dk];
+        np.label = nextLabel(state.placing.type);
         state.parts.push(np);
         state.placing = null; document.body.classList.remove('placing'); setActiveAction('select'); state.tool = 'select';
         save(); render();
@@ -608,6 +635,7 @@
     if (k === 'w' || k === 'W') { chooseTool('wire'); return; }
     if (k === 'r' || k === 'R') { choosePlace('resistor'); return; }
     if (k === 'l' || k === 'L') { choosePlace('led'); return; }
+    if (k === 'b' || k === 'B') { choosePlace('button'); return; }
     if (k === ']' || k === '.') { rotateSelectedBy(1); return; }
     if (k === '[' || k === ',') { rotateSelectedBy(3); return; }
     if (k === 'Delete' || k === 'Backspace') {
@@ -661,6 +689,7 @@
         if (p.value != null) np.value = p.value;
         if (p.color != null) np.color = p.color;
         if (p.flip != null) np.flip = p.flip;
+        np.label = nextLabel(p.type);
         state.parts.push(np); state.sel = { kind: 'part', id: np.id }; save(); render();
         return;
       }
@@ -701,6 +730,11 @@
 
   var inspEl = document.getElementById('inspector');
   function inspPart() { return (state.sel && state.sel.kind === 'part') ? byId(state.sel.id) : null; }
+  inspEl.addEventListener('input', function (e) {
+    var el = e.target.closest('[data-insp]'); if (!el || el.getAttribute('data-insp') !== 'label') return;
+    var p = inspPart(); if (!p) return;
+    p.label = el.value; save(); render();
+  });
   inspEl.addEventListener('change', function (e) {
     var el = e.target.closest('[data-insp]'); if (!el) return;
     var p = inspPart(); if (!p) return;
@@ -725,6 +759,8 @@
     { name: 'Wire tool', key: 'W', run: function () { chooseTool('wire'); } },
     { name: 'Place resistor', key: 'R', run: function () { choosePlace('resistor'); } },
     { name: 'Place LED', key: 'L', run: function () { choosePlace('led'); } },
+    { name: 'Place button', key: 'B', run: function () { choosePlace('button'); } },
+    { name: 'Place buzzer', key: '', run: function () { choosePlace('buzzer'); } },
     { name: 'Rotate selection', key: '] / [', run: function () { rotateSelectedBy(1); } },
     { name: 'Duplicate selection', key: 'Ctrl D', run: duplicateSelected },
     { name: 'Undo', key: 'Ctrl Z', run: undo },
@@ -774,11 +810,12 @@
     var d = PARTS[p.type] && PARTS[p.type].defaults; if (d) for (var k in d) if (p[k] == null) p[k] = d[k];
     return p;
   }
-  function validPart(p) { return p.legHoles && PARTS[p.type] && holesById[p.legHoles[0]] && holesById[p.legHoles[1]]; }
+  function validPart(p) { return p.legHoles && PARTS[p.type] && p.legHoles.every(function (id) { return holesById[id]; }); }
   function snapshot() { return { version: 1, parts: state.parts, wires: state.wires, nextId: state.nextId }; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (_) {} }
   function adopt(o) {
     state.parts = (o.parts || []).map(normalizePart).filter(validPart);
+    state.parts.forEach(function (p) { if (!p.label) p.label = nextLabel(p.type); });
     state.wires = (o.wires || []).filter(function (w) { return connXY(w.from) && connXY(w.to); });
     state.nextId = o.nextId || (state.parts.length + state.wires.length + 10);
   }
@@ -827,6 +864,7 @@
       var legs = deriveLegs(type, anchor, 0); if (!legs) return null;
       var p = { id: state.nextId++, type: type, anchor: legs[0], rot: 0, legHoles: legs };
       var sd = PARTS[type].defaults; if (sd) for (var sk in sd) p[sk] = sd[sk];
+      p.label = nextLabel(type);
       state.parts.push(p);
     }
     part('resistor', 12, 'b');
