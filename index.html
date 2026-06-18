@@ -123,9 +123,9 @@
       </section>
 
       <section class="panel">
-        <h2 class="panel-title">Checks</h2>
-        <div id="checks" class="checks ok">No electrical issues</div>
-        <div class="panel-tip">Hover any hole to light up everything it is electrically connected to.</div>
+        <h2 class="panel-title">Issues</h2>
+        <div id="checks" class="checks"><div class="erc-ok">No electrical issues found.</div></div>
+        <div class="panel-tip">Hover a hole to light its net. Click an issue to highlight where it is.</div>
       </section>
     </aside>
   </div>
@@ -136,6 +136,7 @@
     <button data-action="rotate-sel" title="Rotate selected (R)">Rotate</button>
     <span class="bhint">V select &middot; W wire &middot; R/L place &middot; [ ] rotate &middot; Ctrl+D duplicate &middot; Ctrl+K commands</span>
     <span class="grow"></span>
+    <span class="ercbadge ok" id="ercbadge">No issues</span>
     <span class="status" id="status"></span>
     <div class="zoomctl">
       <button data-action="zoomout" title="Zoom out (Ctrl -)">&minus;</button>

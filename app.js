@@ -186,7 +186,7 @@
   })();
 
   // ---------- state ----------
-  var state = { parts: [], wires: [], sel: null, tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, nextId: 1 };
+  var state = { parts: [], wires: [], sel: null, tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1 };
   var wireColor = '#2a6fd6';
   var lastPointer = { x: dims.width / 2, y: 80 };
   var drag = null;
@@ -334,35 +334,47 @@
     board.holes.forEach(function (h) { holeNet[h.id] = find(h.node); });
     for (var pid2 in ardPins) pinNet[pid2] = find(pid2);
 
-    var issues = [];
-    var rp = [find('rail-top-plus'), find('rail-bot-plus')];
-    var rm = [find('rail-top-minus'), find('rail-bot-minus')];
-    if (rp.some(function (a) { return rm.indexOf(a) >= 0; })) issues.push('Power rails are shorted (+ tied to -).');
+    // ---- L1 ERC: structured violations ----
+    var violations = [];
+    function viol(sev, rule, net, msg, fix, partIds) { violations.push({ sev: sev, rule: rule, net: net || null, msg: msg, fix: fix || '', partIds: partIds || [] }); }
+
+    // sources (+ rails by convention, Arduino power pins) and grounds, by net root
+    var sources = {}, grounds = {};
+    function addSrc(node, v) { var r = find(node); (sources[r] = sources[r] || {})[v] = true; }
+    function addGnd(node) { grounds[find(node)] = true; }
+    addSrc('rail-top-plus', 5); addSrc('rail-bot-plus', 5);
+    addGnd('rail-top-minus'); addGnd('rail-bot-minus');
+    if (ardPins['ARD-5V']) addSrc('ARD-5V', 5);
+    if (ardPins['ARD-3V3']) addSrc('ARD-3V3', 3.3);
+    if (ardPins['ARD-IOREF']) addSrc('ARD-IOREF', 5);
+    ['ARD-GND', 'ARD-GND2', 'ARD-GND3'].forEach(function (p) { if (ardPins[p]) addGnd(p); });
+    for (var sr in sources) {
+      if (grounds[sr]) viol('err', 'short', sr, 'Power is shorted to ground.', 'Remove the wire tying a power pin or rail directly to ground.');
+      var vl = Object.keys(sources[sr]);
+      if (vl.length > 1) viol('err', 'contention', sr, 'Two supply voltages (' + vl.join('V, ') + 'V) are tied together.', 'Connect this net to only one supply.');
+    }
+
+    // shorted 2-leg component
     state.parts.forEach(function (p) {
       if (p.legHoles.length !== 2) return;
       var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
-      if (h0 && h1 && h0.node === h1.node) issues.push((PARTS[p.type] ? PARTS[p.type].label : p.type) + ' is shorted (both legs on the same strip).');
+      if (h0 && h1 && h0.node === h1.node) viol('err', 'shorted_part', find(h0.node), (p.label || PARTS[p.type].label) + ' is shorted (both legs on the same strip).', 'Move one leg to another column.', [p.id]);
     });
 
-    // LED polarity / missing-resistor checks. Supply = + rails and 5V; ground =
-    // - rails and GND. Because components do not union nets, an LED whose legs
-    // land directly on supply and ground has no resistor in series.
+    // LED missing-resistor / reversed (supply = + rails & 5V/3V3/VIN; ground = - rails & GND)
     var supRoots = ['rail-top-plus', 'rail-bot-plus', 'ARD-5V', 'ARD-3V3', 'ARD-VIN'].map(find);
     var gndRoots = ['rail-top-minus', 'rail-bot-minus', 'ARD-GND', 'ARD-GND2', 'ARD-GND3'].map(find);
     function inSet(set, r) { return set.indexOf(r) >= 0; }
-    var ledNoRes = false, ledRev = false;
     state.parts.forEach(function (p) {
       if (p.type !== 'led') return;
       var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
       if (!h0 || !h1 || h0.node === h1.node) return;
       var ra = find(p.flip ? h1.node : h0.node), rc = find(p.flip ? h0.node : h1.node);
       if ((inSet(supRoots, ra) && inSet(gndRoots, rc)) || (inSet(gndRoots, ra) && inSet(supRoots, rc))) {
-        ledNoRes = true;
-        if (inSet(gndRoots, ra) && inSet(supRoots, rc)) ledRev = true;
+        viol('warn', 'led_no_resistor', find(h0.node), (p.label || 'LED') + ' has no current-limiting resistor (directly across power).', 'Add a 220-330 ohm resistor in series.', [p.id]);
+        if (inSet(gndRoots, ra) && inSet(supRoots, rc)) viol('warn', 'led_reversed', find(h0.node), (p.label || 'LED') + ' looks backwards (cathode toward +).', 'Flip the LED so its anode faces +.', [p.id]);
       }
     });
-    if (ledNoRes) issues.push('LED is directly across power with no current-limiting resistor.');
-    if (ledRev) issues.push('LED looks backwards (its cathode is toward +).');
 
     // connector status: count active connectors per net (part legs + wired Arduino pins).
     // A leg is "connected" (green) only if it shares a net with another connector.
@@ -376,7 +388,7 @@
       if (ardPins[w.to]) bumpNet(find(w.to));
     });
 
-    nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, issues: issues, netCount: netCount };
+    nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, violations: violations, netCount: netCount };
   }
   function rootOfNode(nodeId) {
     if (!nets) return null;
@@ -394,8 +406,9 @@
     refreshNets();
     clear(wireLayer); clear(partLayer); clear(overlay);
 
-    // active electrical net to highlight: hover wins, else current selection
-    var active = (state.hoverNode != null) ? nets.nodeNet[state.hoverNode] : selectionNetRoot();
+    // active electrical net to highlight: hover wins, else selection, else a clicked issue
+    var sn = selectionNetRoot();
+    var active = (state.hoverNode != null) ? nets.nodeNet[state.hoverNode] : (sn != null ? sn : state.issueNet);
     if (active != null) {
       board.holes.forEach(function (h) {
         if (nets.holeNet[h.id] === active) {
@@ -470,7 +483,7 @@
       }
     }
     updateStatus();
-    updateChecks();
+    renderIssues();
     renderInspector();
   }
 
@@ -481,11 +494,22 @@
       : (state.tool === 'wire' ? (state.wireDraft ? 'wire: pick 2nd hole' : 'wire: pick 1st hole') : 'select');
     s.textContent = state.parts.length + ' parts, ' + state.wires.length + ' wires  |  ' + mode;
   }
-  function updateChecks() {
+  function renderIssues() {
     var ck = document.getElementById('checks');
-    if (!ck || !nets) return;
-    if (!nets.issues.length) { ck.textContent = 'No electrical issues'; ck.className = 'checks ok'; }
-    else { ck.innerHTML = nets.issues.map(function (s) { return '<div>' + s + '</div>'; }).join(''); ck.className = 'checks warn'; }
+    var v = (nets && nets.violations) || [];
+    var errs = v.filter(function (x) { return x.sev === 'err'; }).length, warns = v.length - errs;
+    if (ck) {
+      if (!v.length) ck.innerHTML = '<div class="erc-ok">No electrical issues found.</div>';
+      else ck.innerHTML = v.map(function (x, i) {
+        return '<div class="erc-item ' + x.sev + '" data-vi="' + i + '" title="Click to highlight"><div class="erc-msg">' + x.msg + '</div>' + (x.fix ? '<div class="erc-fix">' + x.fix + '</div>' : '') + '</div>';
+      }).join('');
+    }
+    var bdg = document.getElementById('ercbadge');
+    if (bdg) {
+      if (!v.length) { bdg.textContent = 'No issues'; bdg.className = 'ercbadge ok'; }
+      else if (errs) { bdg.textContent = errs + ' error' + (errs > 1 ? 's' : '') + (warns ? ' / ' + warns + ' warn' : ''); bdg.className = 'ercbadge err'; }
+      else { bdg.textContent = warns + ' warning' + (warns > 1 ? 's' : ''); bdg.className = 'ercbadge warn'; }
+    }
   }
 
   var _inspSig = '';
@@ -541,6 +565,7 @@
     if (spaceDown || e.button === 1) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; document.body.classList.add('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); return; }
     lastPointer = toBoard(e);
     if (state.placing || state.tool === 'wire') return;
+    state.issueNet = null;
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
     if (partEl) {
       var id = +partEl.getAttribute('data-part-id');
@@ -751,6 +776,16 @@
       var nr = (p.rot + 1) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
       if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); _inspSig = ''; render(); }
     } else if (k === 'delete') { pushHistory(); state.parts = state.parts.filter(function (x) { return x.id !== p.id; }); state.sel = null; save(); render(); }
+  });
+
+  // click an issue row -> highlight its net / select the involved part
+  var checksEl = document.getElementById('checks');
+  if (checksEl) checksEl.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-vi]'); if (!el) return;
+    var v = nets && nets.violations && nets.violations[+el.getAttribute('data-vi')]; if (!v) return;
+    if (v.partIds && v.partIds.length) { state.sel = { kind: 'part', id: v.partIds[0] }; state.issueNet = null; }
+    else { state.sel = null; state.issueNet = v.net; }
+    render();
   });
 
   // ---------- command palette (Ctrl/Cmd K) ----------

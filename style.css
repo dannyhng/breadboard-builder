@@ -142,11 +142,20 @@ body.wiring #board { cursor: crosshair; }
 .inspector-body .insp-row button { flex: 1; }
 .inspector-body .insp-note { font-size: 10.5px; color: var(--text-3); margin-top: 8px; line-height: 1.4; }
 
-.checks { font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; }
-.checks.ok { color: var(--ok); }
-.checks.warn { color: var(--warn); }
-.checks.warn div { margin: 2px 0; }
+.checks { line-height: 1.4; }
+.erc-ok { color: var(--ok); font-size: 12px; }
+.erc-item { padding: 6px 8px; margin-bottom: 5px; border-radius: 5px; cursor: pointer; border-left: 3px solid var(--border); background: var(--surface-2); transition: background var(--dur-fast) var(--ease-out); }
+.erc-item:hover { background: var(--surface-3); }
+.erc-item.err { border-left-color: var(--err); }
+.erc-item.warn { border-left-color: var(--warn); }
+.erc-msg { font-size: 12px; color: var(--text-1); }
+.erc-fix { font-size: 11px; color: var(--text-3); margin-top: 2px; }
 .panel-tip { font-size: 11px; color: var(--text-3); margin-top: 8px; line-height: 1.4; }
+
+.ercbadge { font-size: 11px; padding: 3px 9px; border-radius: 10px; font-weight: 600; border: 1px solid var(--border); }
+.ercbadge.ok { color: var(--ok); }
+.ercbadge.warn { color: var(--warn); border-color: var(--warn); }
+.ercbadge.err { color: var(--err); border-color: var(--err); }
 
 /* ---------- bottom bar ---------- */
 .bottombar {
