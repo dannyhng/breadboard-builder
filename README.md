@@ -1,7 +1,7 @@
 # Breadboard Builder
 
-A browser based virtual breadboard. Drop an Arduino, LEDs and resistors onto a
-realistic breadboard, draw the jumper wires, and save the layout. Built to plan
+A browser based virtual breadboard. Drop an Arduino, parts and wires onto a
+realistic breadboard, and watch the LEDs light up. Built to plan and understand
 wiring for electronics study, with nothing to install: it runs from a URL or
 straight off your hard drive.
 
@@ -9,49 +9,90 @@ This is an original, from scratch alternative to Fritzing's breadboard view. The
 realistic look is all hand drawn SVG (see [NOTICE.md](NOTICE.md) for why that
 matters).
 
+**Live:** https://dannyhng.github.io/breadboard-builder/
+
 ## Run it
 
 - Easiest: double click `index.html`. That is the whole "nothing to install"
   promise, working.
-- To open it on any device or share with classmates: push this folder to a
-  GitHub repo and turn on GitHub Pages. It redeploys on every push, no build
-  step.
+- To open it on any device or share with classmates: it is already on GitHub
+  Pages at the link above, and redeploys on every push with no build step.
 
-## What it does (v1)
+## What it does
 
-- A realistic breadboard with correctly grouped electrical holes (the a-e and
-  f-j column groups and the power rails, just like a real board).
-- Place an **LED** or a **Resistor** from the palette. Legs snap to holes, and
-  **R** rotates them: horizontal or vertical, including across the ravine.
-- Draw colored **jumper wires** between any two holes (or to the Arduino's pins).
-- A stylized **Arduino UNO** below the board with wire-able 5V / GND / D13 / D12
-  pins, so a full "blink an LED" circuit is buildable end to end.
-- **Select a part to edit it** in the Inspector: a resistor's value (with the
-  correct color bands) or an LED's color and polarity.
+### A realistic board, faithful to the real thing
+
+- A breadboard with correctly grouped electrical holes: the a-e and f-j column
+  strips and the power rails, split by the center ravine, exactly like a real
+  board.
+- A stylized **Arduino UNO** below it with every header pin wire-able (5V, 3V3,
+  the GND pins, D0-D13, A0-A5, VIN, IOREF, AREF, RESET), so a full circuit is
+  buildable end to end.
+- Draw colored **jumper wires** between any two holes, or to any Arduino pin.
+
+### A parts library tuned to the Elegoo UNO R3 kit (19 parts)
+
+The bin is grouped into sections, and everything has its own hand drawn art:
+
+- **Basics**: resistor (color-banded by value), LED, RGB LED, diode, pushbutton,
+  buzzer.
+- **Passives**: ceramic capacitor, electrolytic capacitor (polarized), potentiometer.
+- **Sensors**: photoresistor (LDR), thermistor (NTC), tilt switch.
+- **Transistors**: NPN (S8050) and PNP (S8550) in a TO-92 body with E/B/C labels.
+- **ICs and displays**: 8-pin IC, 74HC595 shift register, L293D motor driver,
+  1-digit and 4-digit 7-segment displays.
+
+Parts snap their legs to holes. Polarized parts (LED, diode, electrolytic,
+transistor) have a **Flip** control; valued parts (resistor, caps, transistor,
+sensors) have a **value dropdown** in the Inspector. **DIP-style parts snap to
+straddle the center ravine** so their pins are never accidentally shorted, and
+their rotation is locked (a DIP only goes one way on a real board).
+
+### Live power simulation
+
+Toggle **Power** (on by default) and the board lights up. A simplified DC
+power-flow check finds every net a supply can reach (5V / 3V3 / + rails, and
+digital pins assumed HIGH) and every net that reaches ground, then lights each
+LED that forms a real closed loop: source -> ... -> LED -> ... -> ground. The
+RGB LED lights per channel, a powered buzzer shows sound arcs, and unpowered LEDs
+dim. Turn Power off to see the plain board.
+
+### Catches your mistakes (ERC)
+
 - **Hover any hole** to light up every hole electrically connected to it (the
-  equipotential highlight; it correctly stops at a component). Live **checks**
-  flag a power-rail short, a shorted component, a backwards LED, and an LED with
-  no current-limiting resistor.
-- **Zoom and pan**: scroll to zoom, hold Space or middle-drag to pan, pinch on a
-  touch screen, Fit to reset. **Undo/redo** with Ctrl+Z / Ctrl+Shift+Z.
-- **Select** a part or wire and press **Delete** to remove it.
-- **Autosave** to the browser, plus **Export** / **Import** of the layout as
-  JSON, and **Clear**.
-- A first run demo (resistor + LED + two wires) so an empty board still shows the
-  look and a real circuit.
+  equipotential highlight; it correctly stops at a component).
+- The **Issues** panel and badge flag a power-rail short, a shorted component, a
+  backwards LED, an LED with no current-limiting resistor, and a DIP with shorted
+  pins. Click an issue to highlight where it is.
+
+### Premium editing
+
+- **Command palette** (Ctrl/Cmd+K) for every action.
+- **Drag empty space to pan** the canvas, Shift+drag to marquee-select, scroll to
+  zoom to the cursor, pinch on touch, Fit to reset.
+- **Multi-select** with a marquee and **drag the whole group** together.
+- A **floating toolbar** on the selected part (rotate / flip / duplicate / delete),
+  a custom **right-click menu**, and keyboard shortcuts throughout.
+- **Undo/redo** (Ctrl+Z / Ctrl+Shift+Z), **autosave** to the browser, **Export**
+  and **Import** of the layout as JSON, and **Clear**.
 
 ## Controls
 
 | Action | How |
 | --- | --- |
-| Place a part | Click `LED` or `Resistor`, then click the board |
-| Move a part | Drag it |
-| Rotate a part | While placing, or with a part selected, press `R` |
-| Draw a wire | Click `Wire`, click the first hole, click the second |
-| Wire color | The color swatch next to `Wire` |
-| Select | Click a part or wire (in Select mode) |
-| Delete | Select it, press `Delete` or `Backspace` |
+| Place a part | Click it in the bin (or Ctrl+K), then click the board |
+| Move a part | Drag it (drag a multi-selection to move the group) |
+| Pan the canvas | Drag empty space, or hold Space, or middle-drag |
+| Marquee select | Shift+drag on empty space |
+| Rotate a part | While placing, or with a part selected, press `]` or `[` |
+| Flip polarity | The Flip control on a polarized part |
+| Draw a wire | Click `Wire` (or `W`), click the first hole, click the second |
+| Zoom | Scroll, pinch, or the +/- controls; `0` or Fit to reset |
+| Simulate power | The `Power` button in the bottom bar |
+| Duplicate | Ctrl+D |
+| Delete | Select it, press `Delete` |
 | Cancel placing / wiring | `Escape` |
+| Command palette | Ctrl/Cmd+K |
 
 ## How it is built
 
@@ -60,42 +101,41 @@ No framework, no build tooling. A single page plus a few plain scripts:
 | File | Role |
 | --- | --- |
 | `index.html` | Markup, the SVG, gradient/filter `<defs>`, the hole `<symbol>` |
-| `style.css` | Styling |
+| `style.css` | Styling and the light/dark design tokens |
 | `board.js` | Breadboard geometry + the electrical-node model. Pure data, no DOM, so it is unit-testable under Node |
-| `parts.js` | Part definitions as data. Each part declares its leg span and a realistic `draw()`. Adding a 2-leg part is one entry |
-| `app.js` | State, rendering, all the interaction (place / drag / snap / wire / select / delete), and save/load |
+| `parts.js` | Part definitions as data. Each part declares its legs, a `draw()`, and optional `polar` / `values` / `straddle` flags |
+| `app.js` | State, rendering, all interaction (place / drag / snap / wire / select / pan / zoom), the ERC, the power simulation, and save/load |
 
-The one idea everything rests on: **every hole belongs to one electrical node**
-(a group of connected holes), exactly like a real breadboard. The data model
-tracks it, which is what makes a future "did I wire this right?" checker cheap.
+Two ideas everything rests on:
 
-Rendering follows the performance pattern from the research: the ~400 repeated
-holes are one `<symbol>` instanced with `<use>` and carry no filters, while the
-few "hero" parts (the glossy LED dome, the banded resistor) spend the gradient
-and drop-shadow budget. See the technique notes in `DESIGN.md`.
+1. **Every hole belongs to one electrical node**, exactly like a real breadboard.
+   Wires union nodes; components do not. This single model drives the
+   equipotential highlight, the ERC, the connector status dots, and the power
+   simulation.
+2. **Parts are data, not code.** `PARTS[type]` declares the legs (as column/row
+   offsets) and a `draw()`; the app handles placement, rotation, snapping,
+   labels, the Inspector, and lighting generically. Adding a part is one entry
+   plus a draw function.
+
+Rendering spends its budget where it counts: the ~400 repeated holes are one
+`<symbol>` instanced with `<use>` and carry no filters, while the parts spend the
+gradient and drop-shadow budget. Small labels are hidden when zoomed out (LOD).
 
 ## Verified
 
-- `node --check` passes on all scripts.
-- The board model is checked under Node: 400 holes, 64 electrical nodes, correct
-  column grouping and ravine split.
-- Rendered in a real browser with zero console errors. Placing a part and drawing
-  a wire were both driven programmatically and confirmed to work.
+Every change is driven in a real browser before shipping: place each part, rotate
+and flip, run the simulation, and assert zero uncaught console errors. The board
+model is also checked under Node (hole count, node count, column grouping, ravine
+split), and `node --check` passes on all scripts.
 
-## Roadmap (next, in rough order)
+## Roadmap
 
-1. More parts: push button (4-leg, straddles the ravine), potentiometer, a DIP
-   IC, jumper-less power.
-2. Full-size 63-column board as a toggle (current default is a 30-column board
-   that fits a screen).
-3. Deepen the wiring checker. The equipotential highlight + short detection have
-   shipped (union-find over the electrical nodes). Next: floating-pin detection
-   and "is D13 actually connected to the LED?" reachability.
-4. Draggable Arduino, and a small parts library.
-5. PNG export for lab reports.
-
-Shipped since the first commit: rotate parts with `R`, horizontal or vertical
-across the ravine.
+- Deepen the simulation: button press state, transistor switching, lighting the
+  7-segment from its pins.
+- A schematic view of the same circuit.
+- Full-size 63-column board as a toggle (current default fits a screen).
+- PNG export for lab reports, and a draggable Arduino.
+- More parts as the kit work continues (MOSFET, more DIPs via the shared body).
 
 ## Art and licensing
 
@@ -107,4 +147,5 @@ software). Full detail and sources: [NOTICE.md](NOTICE.md).
 ## Design doc
 
 [DESIGN.md](DESIGN.md) is the original plan and the engineering notes (the
-electrical model, the snap rule, the gotchas).
+electrical model, the snap rule, the gotchas). [COMPARISON.md](COMPARISON.md)
+tracks where this stands against Fritzing.

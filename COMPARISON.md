@@ -18,15 +18,15 @@ does not apply to a web breadboard tool.
 | Capability | Ours today | Fritzing | Modern bar (Tinkercad / Wokwi) |
 | --- | --- | --- | --- |
 | Realistic breadboard look | Yes | Yes | Yes |
-| Place + rotate parts | Yes (LED, resistor) | Yes (huge library) | Yes (broad library) |
-| Jumper wires | Click hole to hole | Bendable wires + Bezier curves | Yes |
-| Equipotential highlight (see the net) | Yes (shipped) | Yes (press-and-hold) | Partial |
-| Wiring checks | Short, shorted part, reversed LED, no resistor | Ratsnest "still to connect" | Live electrical sim |
-| Edit part values (Inspector) | Yes (resistor Ω, LED color + polarity) | Yes (resistance, LED color, live) | Yes |
-| Undo/redo, multi-select, copy/paste | No | Yes | Yes |
-| Zoom / pan | No | Yes | Yes |
-| Parts library + search | 2 parts | Large bins + search | Large catalogs |
-| Live simulation of real code | No | Basic/recent | Yes (the headline feature) |
+| Place + rotate parts | Yes (19 parts, Elegoo UNO R3 aligned) | Yes (huge library) | Yes (broad library) |
+| Jumper wires | Click hole to hole, or to any Arduino pin | Bendable wires + Bezier curves | Yes |
+| Equipotential highlight (see the net) | Yes | Yes (press-and-hold) | Partial |
+| Wiring checks (ERC) | Short, shorted part, reversed LED, no resistor, shorted DIP pins | Ratsnest "still to connect" | Live electrical sim |
+| Edit part values (Inspector) | Yes (value dropdowns, LED color, flip polarity) | Yes (resistance, LED color, live) | Yes |
+| Undo/redo, multi-select, group-drag | Yes | Yes | Yes |
+| Zoom / pan | Yes (scroll-zoom-to-cursor, drag-to-pan, pinch) | Yes | Yes |
+| Parts library + search | 19 parts in sections + Ctrl+K palette | Large bins + search | Large catalogs |
+| Live simulation | Yes: DC power-flow lights the LEDs (connectivity level, not code execution) | Basic/recent | Yes (the headline feature, runs real code) |
 | Share link / embed | No (JSON export) | File | Yes (one-click) |
 | Install | None (browser) | Desktop download | None (browser) |
 
@@ -37,53 +37,52 @@ The category has moved past "draw a static wiring picture." Tinkercad Circuits
 the bar, and that bar is **live in-browser simulation of the actual circuit/code**.
 A static diagram no longer commands payment on its own.
 
-So the realistic premium play for a solo study tool is NOT to out-simulate
-Autodesk and Wokwi. It is to be **the clearest, smoothest way to learn breadboard
-wiring**: lean into the teaching angle (the equipotential highlight, the wiring
-checker, "show me what's actually connected and what's wrong"), wrap it in
-premium editor polish (undo, zoom/pan, smooth drag, an inspector for values), and
-keep the zero-install, zero-account simplicity. That is a defensible niche Fritzing
-underserves and the simulators treat as secondary.
+We are not trying to out-simulate Autodesk and Wokwi (we do not execute sketches).
+The play is to be **the clearest, smoothest way to learn breadboard wiring**: the
+equipotential highlight, the ERC, and now a connectivity-level power simulation
+that lights the LEDs and shows a circuit working or not, wrapped in premium editor
+polish (undo, zoom/pan, drag-to-pan, group move, an inspector, a command palette),
+with zero install and zero account. That sits deliberately between Fritzing's
+static diagram and Wokwi's full code sim, and it is a defensible study niche.
 
-## Premium roadmap (ranked)
+## Premium roadmap (status)
 
-**P0 - the line between "toy" and "tool":**
-1. Undo / redo. SHIPPED (keyboard + buttons).
-2. Zoom + pan. SHIPPED (scroll to zoom, space/middle-drag pan, pinch on touch,
-   Fit to reset). This is also the mobile unlock.
-3. Smooth drag: move only the dragged element per frame, commit on drop (no full
-   re-render per mousemove). NEXT.
+**P0 - the line between "toy" and "tool" (all SHIPPED):**
+1. Undo / redo (keyboard + buttons).
+2. Zoom + pan (scroll-zoom-to-cursor, drag-to-pan, Space/middle-drag, pinch, Fit).
+3. Marquee multi-select and group-drag.
 
-**P1 - depth:**
-4. Inspector panel. SHIPPED. Select a part, edit its value: resistor ohms (with
-   correct color bands), LED color + polarity (a marked cathode).
-5. More parts on an N-leg architecture: push button, capacitor, potentiometer,
-   diode, transistor, a DIP/IC, a battery/supply. (Current code hardcodes 2 legs.)
-   NEXT.
-6. Deeper wiring checker. Reversed-LED and no-current-limiting-resistor warnings
-   SHIPPED (the equipotential model now correctly stops at components). Next:
-   floating pins, redundant-wire warning, "is D13 actually connected to the LED".
+**P1 - depth (all SHIPPED):**
+4. Inspector: value dropdowns (resistor ohms with color bands, cap uF, transistor
+   part number, sensor model), LED color, flip polarity, rename.
+5. 19 parts on an N-leg architecture, grouped into Basics / Passives / Sensors /
+   Transistors / ICs and displays, tuned to the Elegoo UNO R3 kit. DIPs snap to
+   straddle the ravine.
+6. Deeper ERC: short, shorted component, reversed LED, no-resistor LED, shorted
+   DIP pins; click an issue to highlight it.
+7. Live power simulation: a DC power-flow check lights LEDs (per-channel RGB) and
+   buzzers, with a Power toggle.
 
-**P2 - product:**
-7. Share-by-URL (the state is tiny: base64 it into the link) + PNG export + named
-   saves.
-8. Onboarding/empty state, visible rotate/delete/undo buttons, accessibility,
-   real mobile pinch-zoom.
+**Next:**
+- Deepen the sim: button-press state, transistor switching, lighting the 7-segment.
+- A schematic view of the same circuit; share-by-URL; PNG export for lab reports.
+- Full-size 63-column board toggle; draggable Arduino.
 
-## Known issues the audit found (real, fix as we go)
+## Known issues the audit found (status)
 
-- Resistor body stretched when placed vertically across the ravine (pixel length
-  includes the ravine gap). FIXED: parts now draw a fixed-size body, leads stretch.
-- `nextId` is shared across parts and wires and recomputed from array lengths on
-  import, so ids can be reused after deletions. (Fix: separate counters / uuids.)
-- No `pointercancel` handler, so an interrupted touch-drag can leave a part stuck
-  to the finger on some mobile browsers.
-- Duplicate / redundant wires between the same two holes are allowed. PARTIALLY
-  FIXED: identical wires are now deduped.
-- Silent failures: a drag that can't fit gives no feedback; rotating near a board
-  edge does nothing with no message.
-- `occupied()` only tracks part legs, not wire ends; a part leg and a wire end can
-  share a hole.
-- Single-slot save, JSON-only export (not viewable by a non-technical user).
+- Resistor body stretched across the ravine. FIXED (fixed-size body, leads stretch).
+- `nextId` reused after deletions / on import. FIXED (the id counter now floors
+  above every loaded id).
+- No `pointercancel` handler (stuck touch-drag). FIXED.
+- Duplicate wires between the same two holes. FIXED (identical wires deduped).
+- DIP pins shorted unless straddling the ravine. FIXED (DIPs snap to straddle, and
+  an ERC rule catches any that do not).
+- Right-button marquee, un-undoable rename, stale-gesture state. FIXED in the
+  multi-agent robustness pass.
+- Silent failures: a drag/rotate that cannot fit still gives no message. OPEN
+  (minor; the placement ghost turns red, which covers placement).
+- `occupied()` tracks part legs, not wire ends. OPEN (low impact).
+- Single-slot save, JSON-only export. OPEN (named saves + share-by-URL are
+  roadmap).
 
 This doc is the working plan. It is updated as items ship.
