@@ -247,6 +247,25 @@
     bar(Lx, M, Rx, M, true);   // G  -> lit segments read "5"
     mk('circle', { cx: flip ? (Lx - 5) : (Rx + 5), cy: B, r: 2.2, fill: on });
   }
+  function drawL293(mk, coords, opts) { drawDIP(mk, coords, opts, 'L293D'); }
+
+  // 4-digit 7-segment: four figure-8 digits in a row, reading "1234", with a colon.
+  function drawSevenSeg4(mk, coords, opts) {
+    var b = bbox(coords), midY = (b.minY + b.maxY) / 2;
+    var bx = b.minX - 3, bw = (b.maxX - b.minX) + 6, by = b.minY - 14, bh = (b.maxY - b.minY) + 28;
+    coords.forEach(function (c) { var ey = c.y < midY ? by : by + bh; mk('rect', { x: c.x - 1.5, y: Math.min(c.y, ey), width: 3, height: Math.abs(c.y - ey) + 1, fill: '#9a9a9a' }); });
+    mk('rect', { x: bx, y: by, width: bw, height: bh, rx: 4, fill: '#1c1c1c', stroke: '#000', 'stroke-width': 0.8, filter: SOFT });
+    var on = '#dd3322', off = '#3a3a3a', th = 2.4, pad = 7, n = 4;
+    var cellW = (bw - 2 * pad) / n, dh = Math.min(bh * 0.30, 22), dw = Math.min(cellW * 0.30, 8), dcy = by + bh / 2;
+    function bar(x1, y1, x2, y2, lit) { mk('rect', { x: Math.min(x1, x2) - th / 2, y: Math.min(y1, y2) - th / 2, width: Math.abs(x2 - x1) + th, height: Math.abs(y2 - y1) + th, rx: th / 2, fill: lit ? on : off }); }
+    var digits = [[0, 1, 1, 0, 0, 0, 0], [1, 1, 0, 1, 1, 0, 1], [1, 1, 1, 1, 0, 0, 1], [0, 1, 1, 0, 0, 1, 1]]; // 1 2 3 4 as A,B,C,D,E,F,G
+    for (var i = 0; i < n; i++) {
+      var dcx = bx + pad + cellW * i + cellW / 2, T = dcy - dh, M = dcy, B2 = dcy + dh, Lx = dcx - dw, Rx = dcx + dw, g = digits[i];
+      bar(Lx, T, Rx, T, g[0]); bar(Rx, T, Rx, M, g[1]); bar(Rx, M, Rx, B2, g[2]); bar(Lx, B2, Rx, B2, g[3]); bar(Lx, M, Lx, B2, g[4]); bar(Lx, T, Lx, M, g[5]); bar(Lx, M, Rx, M, g[6]);
+    }
+    var colX = bx + pad + cellW * 2;
+    mk('circle', { cx: colX, cy: dcy - dh * 0.4, r: 1.6, fill: off }); mk('circle', { cx: colX, cy: dcy + dh * 0.4, r: 1.6, fill: off });
+  }
 
   root.PARTS = {
     led:           { label: 'LED',                  prefix: 'LED', axis: true,  polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawLED, defaults: { color: 'red', flip: false } },
@@ -261,10 +280,13 @@
     button:        { label: 'Pushbutton',           prefix: 'S',   axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 0, dr: 2 }, { dc: 2, dr: 2 }], draw: drawButton, defaults: {} },
     potentiometer: { label: 'Potentiometer',        prefix: 'RV',  axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 4, dr: 0 }], draw: drawPot, values: ['1k', '10k', '100k'], defaults: { value: '10k' } },
     transistor:    { label: 'NPN transistor (TO-92)', prefix: 'Q', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }], draw: drawTransistor, values: ['S8050', 'PN2222', '2N3904', 'BC547'], defaults: { value: 'S8050', flip: false } },
+    pnptransistor: { label: 'PNP transistor (TO-92)', prefix: 'Q', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }], draw: drawTransistor, values: ['S8550', '2N3906', 'BC557'], defaults: { value: 'S8550', flip: false } },
     rgbled:        { label: 'RGB LED (common cathode)', prefix: 'RGB', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }], draw: drawRgbLed, defaults: { flip: false } },
     ic:            { label: 'IC (8-pin DIP)',       prefix: 'U',   axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }], draw: drawIC, defaults: {} },
     shiftregister: { label: 'IC 74HC595 (16-pin)',  prefix: 'U',   axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 4, dr: 0 }, { dc: 5, dr: 0 }, { dc: 6, dr: 0 }, { dc: 7, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }, { dc: 4, dr: 1 }, { dc: 5, dr: 1 }, { dc: 6, dr: 1 }, { dc: 7, dr: 1 }], draw: drawShiftReg, defaults: { flip: false } },
-    sevenseg:      { label: '7-segment display',    prefix: 'DS',  axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 4, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }, { dc: 4, dr: 1 }], draw: drawSevenSeg, defaults: { flip: false } }
+    l293d:         { label: 'L293D motor driver (16-pin)', prefix: 'U', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 4, dr: 0 }, { dc: 5, dr: 0 }, { dc: 6, dr: 0 }, { dc: 7, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }, { dc: 4, dr: 1 }, { dc: 5, dr: 1 }, { dc: 6, dr: 1 }, { dc: 7, dr: 1 }], draw: drawL293, defaults: { flip: false } },
+    sevenseg:      { label: '7-segment display (1 digit)', prefix: 'DS', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 4, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }, { dc: 4, dr: 1 }], draw: drawSevenSeg, defaults: { flip: false } },
+    sevenseg4:     { label: '7-segment display (4 digit)', prefix: 'DS', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 4, dr: 0 }, { dc: 5, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }, { dc: 4, dr: 1 }, { dc: 5, dr: 1 }], draw: drawSevenSeg4, defaults: { flip: false } }
   };
 
   root.RES_VALUES = RES_VALUES;
