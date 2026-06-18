@@ -163,7 +163,8 @@
     mk('line', { x1: len, y1: 0, x2: cx + 3, y2: topY + h, stroke: METAL, 'stroke-width': 2, 'stroke-linecap': 'round' });
     mk('rect', { x: cx - w / 2, y: topY, width: w, height: h, rx: 6, fill: '#1a1a1a', stroke: '#000', 'stroke-width': 0.8, filter: SOFT });
     mk('rect', { x: cx - w / 2 + 2, y: topY + 3, width: 3, height: h - 8, rx: 1.5, fill: '#3a3a3a', opacity: 0.7 });
-    mk('circle', { cx: cx, cy: topY + h - 7, r: 3, fill: '#444', opacity: 0.6 });
+    var closed = !!(opts && opts.pressed);
+    mk('circle', { cx: cx, cy: topY + h - 7, r: 3, fill: closed ? '#27c93f' : '#444', opacity: closed ? 0.95 : 0.6 });
   }
 
   // ---------- N-leg (board-coords) parts ----------
@@ -174,15 +175,17 @@
     });
     var bw = (b.maxX - b.minX) - 6, bh = (b.maxY - b.minY) - 6;
     mk('rect', { x: b.minX + 3, y: b.minY + 3, width: bw, height: bh, rx: 4, fill: '#1d1d1d', stroke: '#000', 'stroke-width': 1, filter: SOFT });
-    var br = Math.min(bw, bh) * 0.32;
-    mk('circle', { cx: cx, cy: cy, r: br, fill: '#c0392b', stroke: '#7a1414', 'stroke-width': 1.2 });
-    mk('circle', { cx: cx - br * 0.3, cy: cy - br * 0.3, r: br * 0.42, fill: '#e06a5a', opacity: 0.5 });
+    var pressed = !!(opts && opts.pressed), br = Math.min(bw, bh) * (pressed ? 0.26 : 0.32);
+    mk('circle', { cx: cx, cy: cy, r: br, fill: pressed ? '#8c2a20' : '#c0392b', stroke: '#7a1414', 'stroke-width': 1.2 });
+    if (pressed) mk('circle', { cx: cx, cy: cy, r: br + 3, fill: 'none', stroke: '#27c93f', 'stroke-width': 1.4, opacity: 0.9 });
+    else mk('circle', { cx: cx - br * 0.3, cy: cy - br * 0.3, r: br * 0.42, fill: '#e06a5a', opacity: 0.5 });
   }
 
   function drawPot(mk, coords, opts) {
     var b = bbox(coords), cy = b.minY, cx = (b.minX + b.maxX) / 2, topY = cy - 40;
+    var bw = Math.max(b.maxX - b.minX, 28) + 12; // keep a real body width when rotated vertical
     coords.forEach(function (c) { mk('line', { x1: c.x, y1: c.y, x2: c.x, y2: topY + 26, stroke: METAL, 'stroke-width': 2.2, 'stroke-linecap': 'round' }); });
-    mk('rect', { x: b.minX - 6, y: topY, width: (b.maxX - b.minX) + 12, height: 28, rx: 3, fill: '#2a4a8a', stroke: '#16264a', 'stroke-width': 1, filter: SOFT });
+    mk('rect', { x: cx - bw / 2, y: topY, width: bw, height: 28, rx: 3, fill: '#2a4a8a', stroke: '#16264a', 'stroke-width': 1, filter: SOFT });
     mk('circle', { cx: cx, cy: topY + 13, r: 10, fill: '#cfcfcf', stroke: '#8a8a8a', 'stroke-width': 1 });
     mk('rect', { x: cx - 1.2, y: topY + 6, width: 2.4, height: 14, rx: 1, fill: '#555' });
   }
@@ -204,7 +207,8 @@
     var flip = !!(opts && opts.flip);
     var sim = !!(opts && opts._sim), rgb = (opts && opts._rgb) || null;
     var b = bbox(coords), cx = (b.minX + b.maxX) / 2, baseY = b.minY;
-    var r = Math.min((b.maxX - b.minX) * 0.42, 22), flangeY = baseY - 18, domeCy = flangeY - 10;
+    var span = Math.max(b.maxX - b.minX, b.maxY - b.minY); // works when rotated vertical (bbox width would be 0)
+    var r = Math.min(span * 0.42, 22), flangeY = baseY - 18, domeCy = flangeY - 10;
     coords.forEach(function (c) { mk('line', { x1: c.x, y1: c.y, x2: c.x, y2: flangeY, stroke: METAL, 'stroke-width': 2.2, 'stroke-linecap': 'round' }); });
     var anyLit = sim && rgb && (rgb.R || rgb.G || rgb.B);
     var glow = !anyLit ? '#9ad7ff' : (rgb.R && rgb.G && rgb.B) ? '#ffffff' : (rgb.R && rgb.G) ? '#ffe25a' : (rgb.R && rgb.B) ? '#ff7ad9' : (rgb.G && rgb.B) ? '#5ad9e0' : rgb.R ? '#ff5a4a' : rgb.G ? '#62ff6e' : '#5a9bff';
@@ -290,8 +294,8 @@
     buzzer:        { label: 'Buzzer',               prefix: 'BZ',  axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawBuzzer, defaults: {} },
     photoresistor: { label: 'Photoresistor (LDR)',  prefix: 'LDR', axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawPhotoresistor, values: ['GL5528', 'GL5516', 'GL5537', 'GL5539'], defaults: { value: 'GL5528' } },
     thermistor:    { label: 'Thermistor (NTC)',     prefix: 'TH',  axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawThermistor, values: ['5k', '10k', '50k', '100k'], defaults: { value: '10k' } },
-    tiltswitch:    { label: 'Tilt switch (ball)',   prefix: 'SW',  axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }], draw: drawTiltSwitch, values: ['SW-520D', 'SW-200D'], defaults: { value: 'SW-520D' } },
-    button:        { label: 'Pushbutton',           prefix: 'S',   axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 0, dr: 2 }, { dc: 2, dr: 2 }], draw: drawButton, defaults: {} },
+    tiltswitch:    { label: 'Tilt switch (ball)',   prefix: 'SW',  axis: true,  pressable: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }], draw: drawTiltSwitch, values: ['SW-520D', 'SW-200D'], defaults: { value: 'SW-520D', pressed: false } },
+    button:        { label: 'Pushbutton',           prefix: 'S',   axis: false, pressable: true, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 0, dr: 2 }, { dc: 2, dr: 2 }], draw: drawButton, defaults: { pressed: false } },
     potentiometer: { label: 'Potentiometer',        prefix: 'RV',  axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 4, dr: 0 }], draw: drawPot, values: ['1k', '10k', '100k'], defaults: { value: '10k' } },
     transistor:    { label: 'NPN transistor (TO-92)', prefix: 'Q', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }], draw: drawTransistor, values: ['S8050', 'PN2222', '2N3904', 'BC547'], defaults: { value: 'S8050', flip: false } },
     pnptransistor: { label: 'PNP transistor (TO-92)', prefix: 'Q', axis: false, polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }], draw: drawTransistor, values: ['S8550', '2N3906', 'BC557'], defaults: { value: 'S8550', flip: false } },

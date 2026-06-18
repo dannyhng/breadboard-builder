@@ -466,7 +466,9 @@
       state.parts.forEach(function (p) {
         var hs = p.legHoles.map(function (id) { return holesById[id]; });
         if (hs.some(function (h) { return !h; })) return;
-        if (p.type === 'resistor' || p.type === 'potentiometer') {
+        if (p.type === 'resistor' || p.type === 'potentiometer' || p.type === 'buzzer' ||
+            ((p.type === 'button' || p.type === 'tiltswitch') && p.pressed)) {
+          // bidirectional loads (and a closed switch) pass current both ways
           for (var i = 0; i < hs.length; i++) for (var j = i + 1; j < hs.length; j++) biEdges.push([find(hs[i].node), find(hs[j].node)]);
         } else if (p.type === 'led' || p.type === 'diode') {
           var an = p.flip ? hs[1] : hs[0], ca = p.flip ? hs[0] : hs[1];
@@ -645,7 +647,7 @@
   function renderInspector() {
     var el = document.getElementById('inspector'); if (!el) return;
     var p = (state.sel && state.sel.kind === 'part') ? byId(state.sel.id) : null;
-    var sig = p ? (p.id + '|' + p.type + '|' + (p.value || '') + '|' + (p.color || '') + '|' + p.flip + '|' + p.rot) : '';
+    var sig = p ? (p.id + '|' + p.type + '|' + (p.value || '') + '|' + (p.color || '') + '|' + p.flip + '|' + p.rot + '|' + p.pressed) : '';
     if (sig === _inspSig) return;
     _inspSig = sig;
     if (!p) { el.innerHTML = '<div class="insp-empty">Select a part to edit its value.</div>'; return; }
@@ -668,6 +670,10 @@
     } else if (PARTS[p.type].polar) {
       h += '<button data-insp="flip">Flip polarity</button>';
       h += '<div class="insp-note">The marked band is the cathode (minus).</div>';
+    }
+    if (PARTS[p.type].pressable) {
+      h += '<button data-insp="pressed">' + (p.pressed ? 'Release' : (p.type === 'tiltswitch' ? 'Close (tilt)' : 'Press')) + '</button>';
+      h += '<div class="insp-note">' + (p.pressed ? 'Closed: current passes through.' : 'Open: no current passes. Toggle it to test the circuit.') + '</div>';
     }
     h += '<div class="insp-row">' + (PARTS[p.type].straddle ? '' : '<button data-insp="rotate">Rotate</button>') + '<button data-insp="delete">Delete</button></div>';
     el.innerHTML = h;
@@ -694,6 +700,17 @@
       html += '<button data-action="del" title="Delete">✕</button>';
       fb.innerHTML = html;
     }
+  }
+
+  // commit an in-flight part/group drag to history exactly once, only if it really
+  // moved. Shared by pointerup, the pinch teardown, and pointercancel so a drag is
+  // never silently lost or recorded as a no-op round-trip.
+  function finishDrag() {
+    if (drag && drag.moved && JSON.stringify(snapshot()) !== drag.before) {
+      try { history.push(drag.before); if (history.length > 120) history.shift(); future.length = 0; } catch (_) {}
+      updateUndoButtons(); save();
+    }
+    drag = null;
   }
 
   // ---------- events ----------
@@ -724,10 +741,11 @@
   svg.addEventListener('pointerdown', function (e) {
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     var _cm = document.getElementById('ctxmenu'); if (_cm && !_cm.hidden) { hideCtx(); delete pointers[e.pointerId]; return; } // a press while the menu is open just dismisses it
-    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; drag = null; marquee = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
+    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; finishDrag(); marquee = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
     if (spaceDown || e.button === 1) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; document.body.classList.add('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); return; }
     if (e.button === 2) return; // right button -> let the context menu handle it, no select/drag/marquee
     lastPointer = toBoard(e);
+    state.hoverNode = null; state.hoverHoleId = null; // a gesture is starting; drop any stale hover ring
     if (state.placing || state.tool === 'wire') return;
     state.issueNet = null;
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
@@ -755,11 +773,13 @@
     // empty space: plain drag pans the canvas; Shift+drag marquee-selects; a click with no drag deselects
     if (e.shiftKey) {
       marquee = { x0: lastPointer.x, y0: lastPointer.y, x1: lastPointer.x, y1: lastPointer.y, moved: false };
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {} // keep tracking past the SVG edge
       render(); return;
     }
     pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, fromEmpty: true };
     document.body.classList.add('panning');
     try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    render(); // drop any stale hover ring at pan start
   });
 
   window.addEventListener('pointerup', function (e) {
@@ -777,14 +797,11 @@
       }
       marquee = null; render();
     }
-    if (drag) {
-      if (drag.moved) { try { history.push(drag.before); if (history.length > 120) history.shift(); future.length = 0; } catch (_) {} updateUndoButtons(); save(); }
-      drag = null;
-    }
+    if (drag) finishDrag();
   });
   window.addEventListener('pointercancel', function (e) {
     delete pointers[e.pointerId];
-    pinch = null; drag = null;
+    pinch = null; finishDrag(); marquee = null;
     if (pan) { pan = null; document.body.classList.remove('panning'); }
   });
   svg.addEventListener('wheel', function (e) {
@@ -897,7 +914,7 @@
     if (!state.sel || state.sel.kind !== 'part') return;
     var p = byId(state.sel.id); if (!p) return;
     var anchor = holesById[p.anchor]; if (!anchor) return;
-    var offs = [[0, 2], [0, -2], [2, 0], [-2, 0], [0, 4]];
+    var offs = PARTS[p.type].straddle ? [[2, 0], [-2, 0], [4, 0], [-4, 0], [6, 0]] : [[0, 2], [0, -2], [2, 0], [-2, 0], [0, 4]];
     for (var i = 0; i < offs.length; i++) {
       var ri = ROWS.indexOf(anchor.row) + offs[i][1];
       if (ri < 0 || ri >= ROWS.length) continue;
@@ -919,6 +936,15 @@
     var nxt = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', nxt);
     try { localStorage.setItem('bb.theme', nxt); } catch (_) {}
+  }
+  function clearBoard() { // one reset path for the toolbar, context menu, and palette
+    if (!window.confirm('Clear the whole layout?')) return;
+    pushHistory();
+    state.parts = []; state.wires = [];
+    state.sel = null; state.multi = []; marquee = null;
+    state.placing = null; state.wireDraft = null;
+    document.body.classList.remove('placing');
+    save(); render();
   }
   function deleteSelected() {
     if (drag) { try { svg.releasePointerCapture(drag.pointerId); } catch (_) {} drag = null; } // never keep a drag pointed at a deleted part
@@ -951,7 +977,7 @@
     else if (act === 'undo') { undo(); return; }
     else if (act === 'redo') { redo(); return; }
     else if (act === 'fit') { fitView(); return; }
-    else if (act === 'power') { state.sim = !state.sim; syncPowerBtn(); render(); return; }
+    else if (act === 'power') { state.sim = !state.sim; try { localStorage.setItem('bb.sim', state.sim ? '1' : '0'); } catch (_) {} syncPowerBtn(); render(); return; }
     else if (act === 'zoomin') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 0.83); return; }
     else if (act === 'zoomout') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 1.2); return; }
     else if (act === 'rotate-sel') { rotateSelected(); return; }
@@ -960,7 +986,7 @@
     else if (act === 'flip-sel') { flipSelected(); return; }
     else if (act === 'export') { exportJSON(); return; }
     else if (act === 'import') { document.getElementById('file').click(); return; }
-    else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); render(); } return; }
+    else if (act === 'clear') { clearBoard(); return; }
     render();
   });
   document.getElementById('wireColor').addEventListener('input', function (e) { wireColor = e.target.value; });
@@ -996,7 +1022,9 @@
     var p = inspPart(); if (!p) return;
     var k = el.getAttribute('data-insp');
     if (k === 'flip') { pushHistory(); p.flip = !p.flip; save(); _inspSig = ''; render(); }
+    else if (k === 'pressed') { p.pressed = !p.pressed; save(); _inspSig = ''; render(); } // live sim toggle, not an undoable edit
     else if (k === 'rotate') {
+      if (PARTS[p.type].straddle) return; // DIPs are locked to straddling the ravine
       var nr = (p.rot + 1) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
       if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); _inspSig = ''; render(); }
     } else if (k === 'delete') { pushHistory(); state.parts = state.parts.filter(function (x) { return x.id !== p.id; }); state.sel = null; save(); render(); }
@@ -1038,7 +1066,7 @@
       state.sel = { kind: 'wire', id: wireEl.getAttribute('data-wire-id') }; state.issueNet = null; render();
       items = [{ l: 'Delete wire', a: deleteSelected }];
     } else {
-      items = [{ l: 'Fit view', a: fitView }, { l: 'Clear board', a: function () { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; save(); render(); } } }];
+      items = [{ l: 'Fit view', a: fitView }, { l: 'Clear board', a: clearBoard }];
     }
     showCtx(e.clientX, e.clientY, items);
   });
@@ -1050,7 +1078,7 @@
     var m = document.getElementById('ctxmenu');
     if (m && !m.hidden && !m.contains(e.target)) hideCtx();
   });
-  window.addEventListener('blur', function () { hideCtx(); spaceDown = false; document.body.classList.remove('panning'); }); // a missed keyup must not leave pan mode stuck on
+  window.addEventListener('blur', function () { hideCtx(); spaceDown = false; marquee = null; pan = null; document.body.classList.remove('panning'); }); // a missed keyup / lost focus must not strand pan or a marquee
 
   // ---------- command palette (Ctrl/Cmd K) ----------
   var paletteCmds = [
@@ -1084,7 +1112,7 @@
     { name: 'Fit to view', key: '0', run: fitView },
     { name: 'Export layout (JSON)', key: '', run: exportJSON },
     { name: 'Import layout (JSON)', key: '', run: function () { document.getElementById('file').click(); } },
-    { name: 'Clear board', key: '', run: function () { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; save(); render(); } } },
+    { name: 'Clear board', key: '', run: clearBoard },
     { name: 'Toggle dark / light theme', key: '', run: toggleTheme }
   ];
   var paletteFiltered = paletteCmds.slice(), paletteSel = 0;
@@ -1120,6 +1148,7 @@
   var KEY = 'breadboard.layout.v1';
   function normalizePart(p) {
     if (p.rot == null) p.rot = 0;
+    if (PARTS[p.type] && PARTS[p.type].straddle) p.rot = 0; // DIPs are always straddling, never rotated
     if (p.anchor == null && p.legHoles) p.anchor = p.legHoles[0];
     var d = PARTS[p.type] && PARTS[p.type].defaults; if (d) for (var k in d) if (p[k] == null) p[k] = d[k];
     return p;
@@ -1157,7 +1186,10 @@
   }
   function importData(o) {
     if (!o || o.version !== 1) { window.alert('Unsupported layout version.'); return; }
-    pushHistory(); adopt(o); state.sel = null; save(); render();
+    pushHistory(); adopt(o);
+    state.sel = null; state.multi = []; marquee = null; state.placing = null; state.wireDraft = null;
+    document.body.classList.remove('placing');
+    save(); render();
   }
   function loadSaved() {
     try {
@@ -1202,6 +1234,7 @@
 
   if (!loadSaved()) seedDemo();
   setActiveAction('select');
+  try { var _simPref = localStorage.getItem('bb.sim'); if (_simPref !== null) state.sim = _simPref === '1'; } catch (_) {}
   syncPowerBtn();
   applyView();
   render();
