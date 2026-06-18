@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Breadboard Builder</title>
+  <script>try{document.documentElement.setAttribute('data-theme', localStorage.getItem('bb.theme') || 'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,6 +16,7 @@
       <button class="tab" disabled title="Coming soon">PCB</button>
     </nav>
     <span class="grow"></span>
+    <button class="kbd-hint" data-action="palette" title="Command palette (Ctrl+K)">&#8984;K</button>
     <div class="filebar">
       <button data-action="export" title="Download layout as JSON">Export</button>
       <button data-action="import" title="Load a JSON layout">Import</button>
@@ -124,16 +126,24 @@
     <button data-action="undo" disabled>Undo</button>
     <button data-action="redo" disabled>Redo</button>
     <button data-action="rotate-sel" title="Rotate selected (R)">Rotate</button>
-    <span class="bhint">Click a part in the bin, then click the board. Press R to rotate. Delete removes the selection.</span>
+    <span class="bhint">V select &middot; W wire &middot; R/L place &middot; [ ] rotate &middot; Ctrl+D duplicate &middot; Ctrl+K commands</span>
     <span class="grow"></span>
     <span class="status" id="status"></span>
     <div class="zoomctl">
-      <button data-action="zoomout" title="Zoom out">&minus;</button>
+      <button data-action="zoomout" title="Zoom out (Ctrl -)">&minus;</button>
       <span id="zoomlevel">100%</span>
-      <button data-action="zoomin" title="Zoom in">+</button>
+      <button data-action="zoomin" title="Zoom in (Ctrl +)">+</button>
       <button data-action="fit" title="Fit (0)">Fit</button>
     </div>
+    <button data-action="theme" title="Toggle dark / light">Theme</button>
   </footer>
+
+  <div class="palette-scrim" id="palette" hidden>
+    <div class="palette" role="dialog" aria-label="Command palette">
+      <input id="palette-input" type="text" placeholder="Search parts and actions..." autocomplete="off" spellcheck="false">
+      <div class="palette-list" id="palette-list"></div>
+    </div>
+  </div>
 
   <script src="board.js"></script>
   <script src="parts.js"></script>

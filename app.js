@@ -186,7 +186,7 @@
   })();
 
   // ---------- state ----------
-  var state = { parts: [], wires: [], sel: null, tool: 'select', placing: null, wireDraft: null, hoverNode: null, nextId: 1 };
+  var state = { parts: [], wires: [], sel: null, tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, nextId: 1 };
   var wireColor = '#2a6fd6';
   var lastPointer = { x: dims.width / 2, y: 80 };
   var drag = null;
@@ -344,7 +344,21 @@
     if (ledNoRes) issues.push('LED is directly across power with no current-limiting resistor.');
     if (ledRev) issues.push('LED looks backwards (its cathode is toward +).');
 
-    nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, issues: issues };
+    // connector status: count active connectors per net (part legs + wired Arduino pins).
+    // A leg is "connected" (green) only if it shares a net with another connector.
+    var netCount = {};
+    function bumpNet(root) { netCount[root] = (netCount[root] || 0) + 1; }
+    state.parts.forEach(function (p) {
+      var a = holesById[p.legHoles[0]], c = holesById[p.legHoles[1]];
+      if (a) bumpNet(find(a.node));
+      if (c) bumpNet(find(c.node));
+    });
+    state.wires.forEach(function (w) {
+      if (ardPins[w.from]) bumpNet(find(w.from));
+      if (ardPins[w.to]) bumpNet(find(w.to));
+    });
+
+    nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, issues: issues, netCount: netCount };
   }
   function rootOfNode(nodeId) {
     if (!nets) return null;
@@ -378,6 +392,10 @@
         }
       }
     }
+    if (state.hoverHoleId && holesById[state.hoverHoleId]) {
+      var eh = holesById[state.hoverHoleId];
+      E('circle', { cx: eh.x, cy: eh.y, r: 7.5, fill: 'none', stroke: '#4c8dff', 'stroke-width': 2, opacity: 0.95 }, overlay);
+    }
 
     state.wires.forEach(function (w) {
       var a = connXY(w.from), b = connXY(w.to); if (!a || !b) return;
@@ -400,6 +418,11 @@
             fill: 'none', stroke: '#3aa0ff', 'stroke-width': 1.5, 'stroke-dasharray': '5 3' }, g);
         } catch (_) {}
       }
+      [p.legHoles[0], p.legHoles[1]].forEach(function (hid) {
+        var hh = holesById[hid]; if (!hh) return;
+        var connected = (nets.netCount[nets.holeNet[hid]] || 0) >= 2;
+        E('circle', { cx: hh.x, cy: hh.y, r: 3.3, fill: connected ? '#3fb950' : '#f85149', stroke: '#00000055', 'stroke-width': 0.5, 'pointer-events': 'none' }, partLayer);
+      });
     });
 
     if (state.placing) {
@@ -480,8 +503,9 @@
     }
     if (state.tool === 'select') {
       var hh = nearestHole(lastPointer.x, lastPointer.y, false);
-      var nn = (hh && Math.hypot(hh.x - lastPointer.x, hh.y - lastPointer.y) < P * 0.55) ? hh.node : null;
-      if (nn !== state.hoverNode) { state.hoverNode = nn; render(); }
+      var near = hh && Math.hypot(hh.x - lastPointer.x, hh.y - lastPointer.y) < P * 0.55;
+      var nn = near ? hh.node : null, hid = near ? hh.id : null;
+      if (nn !== state.hoverNode || hid !== state.hoverHoleId) { state.hoverNode = nn; state.hoverHoleId = hid; render(); }
     }
   });
 
@@ -526,7 +550,7 @@
   window.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Spacebar') spaceDown = false; });
 
   svg.addEventListener('pointerleave', function () {
-    if (state.hoverNode != null) { state.hoverNode = null; render(); }
+    if (state.hoverNode != null || state.hoverHoleId != null) { state.hoverNode = null; state.hoverHoleId = null; render(); }
   });
 
   svg.addEventListener('click', function (e) {
@@ -559,25 +583,33 @@
   });
 
   window.addEventListener('keydown', function (e) {
-    var k = e.key;
-    if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
-    if ((e.ctrlKey || e.metaKey) && (k === 'y' || k === 'Y')) { redo(); e.preventDefault(); return; }
+    var k = e.key, mod = e.ctrlKey || e.metaKey;
+    var tag = (e.target && e.target.tagName || '').toUpperCase();
+    var typing = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+    var palOpen = !document.getElementById('palette').hidden;
+
+    if (mod && (k === 'k' || k === 'K')) { openPalette(); e.preventDefault(); return; }
+    if (k === 'Escape') {
+      if (palOpen) { closePalette(); return; }
+      state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return;
+    }
+    if (palOpen) return;
+    if (mod && (k === 'z' || k === 'Z')) { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
+    if (mod && (k === 'y' || k === 'Y')) { redo(); e.preventDefault(); return; }
+    if (mod && (k === 'd' || k === 'D')) { duplicateSelected(); e.preventDefault(); return; }
+    if (mod && (k === '=' || k === '+')) { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 0.83); e.preventDefault(); return; }
+    if (mod && k === '-') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 1.2); e.preventDefault(); return; }
+    if (mod && k === '0') { fitView(); e.preventDefault(); return; }
+    if (typing || mod) return;
+
     if (k === ' ' || k === 'Spacebar') { spaceDown = true; if (e.target === document.body) e.preventDefault(); return; }
     if (k === '0') { fitView(); return; }
-    if (k === 'Escape') { state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return; }
-    if (k === 'r' || k === 'R') {
-      if (state.placing) { state.placing.rot = (state.placing.rot + 1) % 4; render(); e.preventDefault(); return; }
-      if (state.sel && state.sel.kind === 'part') {
-        var p = byId(state.sel.id);
-        if (p) {
-          var nr = (p.rot + 1) % 4;
-          var legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
-          if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); render(); }
-        }
-        e.preventDefault();
-      }
-      return;
-    }
+    if (k === 'v' || k === 'V') { chooseTool('select'); return; }
+    if (k === 'w' || k === 'W') { chooseTool('wire'); return; }
+    if (k === 'r' || k === 'R') { choosePlace('resistor'); return; }
+    if (k === 'l' || k === 'L') { choosePlace('led'); return; }
+    if (k === ']' || k === '.') { rotateSelectedBy(1); return; }
+    if (k === '[' || k === ',') { rotateSelectedBy(3); return; }
     if (k === 'Delete' || k === 'Backspace') {
       if (state.sel) {
         pushHistory();
@@ -593,19 +625,61 @@
   function clearActive() { if (bin) bin.querySelectorAll('.bin-item').forEach(function (b) { b.classList.remove('active'); }); }
   function setActiveEl(b) { clearActive(); if (b && b.classList && b.classList.contains('bin-item')) b.classList.add('active'); }
   function setActiveAction(a) { setActiveEl(bin ? bin.querySelector('[data-action="' + a + '"]') : null); }
-  function rotateSelected() {
+  function chooseTool(t) {
+    state.tool = t; state.placing = null; state.wireDraft = null;
+    document.body.classList.remove('placing');
+    document.body.classList.toggle('wiring', t === 'wire');
+    setActiveAction(t); render();
+  }
+  function choosePlace(type) {
+    if (!PARTS[type]) return;
+    state.tool = 'select'; state.wireDraft = null; state.placing = { type: type, rot: 0 };
+    document.body.classList.add('placing'); document.body.classList.remove('wiring');
+    setActiveEl(bin ? bin.querySelector('[data-part="' + type + '"]') : null); render();
+  }
+  function rotateSelectedBy(delta) {
+    if (state.placing) { state.placing.rot = ((state.placing.rot + delta) % 4 + 4) % 4; render(); return; }
     if (!state.sel || state.sel.kind !== 'part') return;
     var p = byId(state.sel.id); if (!p) return;
-    var nr = (p.rot + 1) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
+    var nr = ((p.rot + delta) % 4 + 4) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
     if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); render(); }
+  }
+  function rotateSelected() { rotateSelectedBy(1); }
+  function duplicateSelected() {
+    if (!state.sel || state.sel.kind !== 'part') return;
+    var p = byId(state.sel.id); if (!p) return;
+    var anchor = holesById[p.anchor]; if (!anchor) return;
+    var offs = [[0, 2], [0, -2], [2, 0], [-2, 0], [0, 4]];
+    for (var i = 0; i < offs.length; i++) {
+      var ri = ROWS.indexOf(anchor.row) + offs[i][1];
+      if (ri < 0 || ri >= ROWS.length) continue;
+      var nh = holeByCR(anchor.col + offs[i][0], ROWS[ri]); if (!nh) continue;
+      var legs = validLegs(p.type, nh, p.rot);
+      if (legs) {
+        pushHistory();
+        var np = { id: state.nextId++, type: p.type, anchor: legs[0], rot: p.rot, legHoles: legs };
+        if (p.value != null) np.value = p.value;
+        if (p.color != null) np.color = p.color;
+        if (p.flip != null) np.flip = p.flip;
+        state.parts.push(np); state.sel = { kind: 'part', id: np.id }; save(); render();
+        return;
+      }
+    }
+  }
+  function toggleTheme() {
+    var nxt = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', nxt);
+    try { localStorage.setItem('bb.theme', nxt); } catch (_) {}
   }
 
   document.body.addEventListener('click', function (e) {
     var b = e.target.closest('[data-action]'); if (!b) return;
     var act = b.getAttribute('data-action');
-    if (act === 'select') { state.tool = 'select'; state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); setActiveEl(b); }
-    else if (act === 'wire') { state.tool = 'wire'; state.placing = null; document.body.classList.remove('placing'); setActiveEl(b); }
-    else if (act === 'place') { state.tool = 'select'; state.wireDraft = null; state.placing = { type: b.getAttribute('data-part'), rot: 0 }; document.body.classList.add('placing'); setActiveEl(b); }
+    if (act === 'select') { chooseTool('select'); return; }
+    else if (act === 'wire') { chooseTool('wire'); return; }
+    else if (act === 'place') { choosePlace(b.getAttribute('data-part')); return; }
+    else if (act === 'theme') { toggleTheme(); return; }
+    else if (act === 'palette') { openPalette(); return; }
     else if (act === 'undo') { undo(); return; }
     else if (act === 'redo') { redo(); return; }
     else if (act === 'fit') { fitView(); return; }
@@ -644,6 +718,53 @@
       if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); _inspSig = ''; render(); }
     } else if (k === 'delete') { pushHistory(); state.parts = state.parts.filter(function (x) { return x.id !== p.id; }); state.sel = null; save(); render(); }
   });
+
+  // ---------- command palette (Ctrl/Cmd K) ----------
+  var paletteCmds = [
+    { name: 'Select tool', key: 'V', run: function () { chooseTool('select'); } },
+    { name: 'Wire tool', key: 'W', run: function () { chooseTool('wire'); } },
+    { name: 'Place resistor', key: 'R', run: function () { choosePlace('resistor'); } },
+    { name: 'Place LED', key: 'L', run: function () { choosePlace('led'); } },
+    { name: 'Rotate selection', key: '] / [', run: function () { rotateSelectedBy(1); } },
+    { name: 'Duplicate selection', key: 'Ctrl D', run: duplicateSelected },
+    { name: 'Undo', key: 'Ctrl Z', run: undo },
+    { name: 'Redo', key: 'Ctrl Shift Z', run: redo },
+    { name: 'Zoom in', key: 'Ctrl +', run: function () { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 0.83); } },
+    { name: 'Zoom out', key: 'Ctrl -', run: function () { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 1.2); } },
+    { name: 'Fit to view', key: '0', run: fitView },
+    { name: 'Export layout (JSON)', key: '', run: exportJSON },
+    { name: 'Import layout (JSON)', key: '', run: function () { document.getElementById('file').click(); } },
+    { name: 'Clear board', key: '', run: function () { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; save(); render(); } } },
+    { name: 'Toggle dark / light theme', key: '', run: toggleTheme }
+  ];
+  var paletteFiltered = paletteCmds.slice(), paletteSel = 0;
+  var paletteEl = document.getElementById('palette');
+  var paletteInput = document.getElementById('palette-input');
+  var paletteList = document.getElementById('palette-list');
+  function openPalette() { paletteEl.hidden = false; paletteInput.value = ''; renderPaletteList(''); paletteInput.focus(); }
+  function closePalette() { paletteEl.hidden = true; }
+  function renderPaletteList(q) {
+    q = (q || '').toLowerCase();
+    paletteFiltered = paletteCmds.filter(function (c) { return c.name.toLowerCase().indexOf(q) >= 0; });
+    paletteSel = 0;
+    if (!paletteFiltered.length) { paletteList.innerHTML = '<div class="palette-empty">No matching commands.</div>'; return; }
+    paletteList.innerHTML = paletteFiltered.map(function (c, i) {
+      return '<div class="palette-item' + (i === 0 ? ' sel' : '') + '" data-i="' + i + '"><span>' + c.name + '</span>' + (c.key ? '<span class="pk">' + c.key + '</span>' : '') + '</div>';
+    }).join('');
+  }
+  function highlightPalette() { var items = paletteList.querySelectorAll('.palette-item'); for (var i = 0; i < items.length; i++) items[i].classList.toggle('sel', i === paletteSel); }
+  function runPalette(i) { var c = paletteFiltered[i]; closePalette(); if (c) c.run(); }
+  if (paletteInput) {
+    paletteInput.addEventListener('input', function () { renderPaletteList(paletteInput.value); });
+    paletteInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { closePalette(); e.preventDefault(); }
+      else if (e.key === 'ArrowDown') { paletteSel = Math.min(paletteFiltered.length - 1, paletteSel + 1); highlightPalette(); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { paletteSel = Math.max(0, paletteSel - 1); highlightPalette(); e.preventDefault(); }
+      else if (e.key === 'Enter') { runPalette(paletteSel); e.preventDefault(); }
+    });
+    paletteList.addEventListener('click', function (e) { var el = e.target.closest('[data-i]'); if (el) runPalette(+el.getAttribute('data-i')); });
+    paletteEl.addEventListener('click', function (e) { if (e.target === paletteEl) closePalette(); });
+  }
 
   // ---------- persistence ----------
   var KEY = 'breadboard.layout.v1';
@@ -711,7 +832,9 @@
     part('resistor', 12, 'b');
     part('led', 19, 'b');
     var r1 = holeByCR(12, 'b'), l2 = holeByCR(21, 'b');
+    var rOut = holeByCR(17, 'b'), lIn = holeByCR(19, 'b');
     if (ardPins['ARD-D13'] && r1) state.wires.push({ id: 'w' + state.nextId++, from: 'ARD-D13', to: r1.id, color: '#1f9d3a' });
+    if (rOut && lIn) state.wires.push({ id: 'w' + state.nextId++, from: rOut.id, to: lIn.id, color: '#2a6fd6' });
     if (ardPins['ARD-GND'] && l2) state.wires.push({ id: 'w' + state.nextId++, from: l2.id, to: 'ARD-GND', color: '#111' });
     save();
   }
