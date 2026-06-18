@@ -186,10 +186,10 @@
   })();
 
   // ---------- state ----------
-  var state = { parts: [], wires: [], sel: null, tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1 };
+  var state = { parts: [], wires: [], sel: null, multi: [], tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1 };
   var wireColor = '#2a6fd6';
   var lastPointer = { x: dims.width / 2, y: 80 };
-  var drag = null;
+  var drag = null, marquee = null;
   var nets = null;
   var history = [], future = [];
   var view = { x: 0, y: 0, w: dims.width, h: dims.height + ARD_H };
@@ -442,7 +442,8 @@
 
     state.parts.forEach(function (p) {
       var g = drawPartInto(partLayer, p.type, p.legHoles, p, { 'data-part-id': p.id, style: 'cursor:grab' });
-      if (g && state.sel && state.sel.kind === 'part' && state.sel.id === p.id) {
+      var isSel = (state.sel && state.sel.kind === 'part' && state.sel.id === p.id) || (state.multi.indexOf(p.id) >= 0);
+      if (g && isSel) {
         try {
           var bb = g.getBBox();
           E('rect', { x: bb.x - 3, y: bb.y - 3, width: bb.width + 6, height: bb.height + 6, rx: 5,
@@ -482,6 +483,11 @@
         E('line', { x1: f.x, y1: f.y, x2: lastPointer.x, y2: lastPointer.y, stroke: '#3aa0ff', 'stroke-width': 2, 'stroke-dasharray': '4 3' }, overlay);
       }
     }
+    if (marquee) {
+      E('rect', { x: Math.min(marquee.x0, marquee.x1), y: Math.min(marquee.y0, marquee.y1),
+        width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0),
+        fill: '#4c8dff22', stroke: '#4c8dff', 'stroke-width': 1, 'stroke-dasharray': '4 3' }, overlay);
+    }
     updateStatus();
     renderIssues();
     renderInspector();
@@ -491,9 +497,10 @@
   function updateStatus() {
     var s = document.getElementById('status');
     if (!s) return;
-    var mode = state.placing ? ('placing ' + state.placing.type + ' (R to rotate)')
+    var mode = state.placing ? ('placing ' + state.placing.type)
       : (state.tool === 'wire' ? (state.wireDraft ? 'wire: pick 2nd hole' : 'wire: pick 1st hole') : 'select');
-    s.textContent = state.parts.length + ' parts, ' + state.wires.length + ' wires  |  ' + mode;
+    var extra = (state.multi && state.multi.length) ? (state.multi.length + ' selected') : mode;
+    s.textContent = state.parts.length + ' parts, ' + state.wires.length + ' wires  |  ' + extra;
   }
   function renderIssues() {
     var ck = document.getElementById('checks');
@@ -575,6 +582,7 @@
       }
       return;
     }
+    if (marquee) { marquee.x1 = lastPointer.x; marquee.y1 = lastPointer.y; marquee.moved = true; render(); return; }
     if (state.tool === 'select') {
       var hh = nearestHole(lastPointer.x, lastPointer.y, false);
       var near = hh && Math.hypot(hh.x - lastPointer.x, hh.y - lastPointer.y) < P * 0.55;
@@ -593,20 +601,40 @@
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
     if (partEl) {
       var id = +partEl.getAttribute('data-part-id');
+      if (e.shiftKey) {
+        var mi = state.multi.indexOf(id);
+        if (mi >= 0) state.multi.splice(mi, 1); else state.multi.push(id);
+        state.sel = null; render(); return;
+      }
+      state.multi = [];
       state.sel = { kind: 'part', id: id };
       if (byId(id)) drag = { id: id, moved: false, before: JSON.stringify(snapshot()) };
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       render(); return;
     }
     var wireEl = e.target.closest && e.target.closest('[data-wire-id]');
-    if (wireEl) { state.sel = { kind: 'wire', id: wireEl.getAttribute('data-wire-id') }; render(); return; }
-    state.sel = null; render();
+    if (wireEl) { state.sel = { kind: 'wire', id: wireEl.getAttribute('data-wire-id') }; state.multi = []; render(); return; }
+    // empty space -> start a marquee (a click with no drag deselects)
+    state.sel = null; state.multi = [];
+    marquee = { x0: lastPointer.x, y0: lastPointer.y, x1: lastPointer.x, y1: lastPointer.y, moved: false };
+    render();
   });
 
   window.addEventListener('pointerup', function (e) {
     delete pointers[e.pointerId];
     if (pinch && Object.keys(pointers).length < 2) pinch = null;
     if (pan) { pan = null; document.body.classList.remove('panning'); }
+    if (marquee) {
+      if (marquee.moved) {
+        var rx0 = Math.min(marquee.x0, marquee.x1), rx1 = Math.max(marquee.x0, marquee.x1);
+        var ry0 = Math.min(marquee.y0, marquee.y1), ry1 = Math.max(marquee.y0, marquee.y1);
+        state.multi = state.parts.filter(function (p) {
+          return p.legHoles.every(function (id) { var h = holesById[id]; return h && h.x >= rx0 && h.x <= rx1 && h.y >= ry0 && h.y <= ry1; });
+        }).map(function (p) { return p.id; });
+        if (state.multi.length === 1) { state.sel = { kind: 'part', id: state.multi[0] }; state.multi = []; }
+      }
+      marquee = null; render();
+    }
     if (drag) {
       if (drag.moved) { try { history.push(drag.before); if (history.length > 120) history.shift(); future.length = 0; } catch (_) {} updateUndoButtons(); save(); }
       drag = null;
@@ -666,7 +694,7 @@
 
     if (mod && (k === 'k' || k === 'K')) { openPalette(); e.preventDefault(); return; }
     if (k === 'Escape') {
-      hideCtx();
+      hideCtx(); marquee = null;
       if (palOpen) { closePalette(); return; }
       state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return;
     }
@@ -688,14 +716,7 @@
     if (k === 'b' || k === 'B') { choosePlace('button'); return; }
     if (k === ']' || k === '.') { rotateSelectedBy(1); return; }
     if (k === '[' || k === ',') { rotateSelectedBy(3); return; }
-    if (k === 'Delete' || k === 'Backspace') {
-      if (state.sel) {
-        pushHistory();
-        if (state.sel.kind === 'part') state.parts = state.parts.filter(function (p) { return p.id !== state.sel.id; });
-        else state.wires = state.wires.filter(function (w) { return w.id !== state.sel.id; });
-        state.sel = null; save(); render(); e.preventDefault();
-      }
-    }
+    if (k === 'Delete' || k === 'Backspace') { deleteSelected(); e.preventDefault(); }
   });
 
   // ---------- tool bins + actions (delegated across the whole UI) ----------
@@ -704,14 +725,14 @@
   function setActiveEl(b) { clearActive(); if (b && b.classList && b.classList.contains('bin-item')) b.classList.add('active'); }
   function setActiveAction(a) { setActiveEl(bin ? bin.querySelector('[data-action="' + a + '"]') : null); }
   function chooseTool(t) {
-    state.tool = t; state.placing = null; state.wireDraft = null;
+    state.tool = t; state.placing = null; state.wireDraft = null; state.multi = [];
     document.body.classList.remove('placing');
     document.body.classList.toggle('wiring', t === 'wire');
     setActiveAction(t); render();
   }
   function choosePlace(type) {
     if (!PARTS[type]) return;
-    state.tool = 'select'; state.wireDraft = null; state.placing = { type: type, rot: 0 };
+    state.tool = 'select'; state.wireDraft = null; state.placing = { type: type, rot: 0 }; state.multi = [];
     document.body.classList.add('placing'); document.body.classList.remove('wiring');
     setActiveEl(bin ? bin.querySelector('[data-part="' + type + '"]') : null); render();
   }
@@ -751,6 +772,12 @@
     try { localStorage.setItem('bb.theme', nxt); } catch (_) {}
   }
   function deleteSelected() {
+    if (state.multi && state.multi.length) {
+      pushHistory();
+      var ids = state.multi.slice();
+      state.parts = state.parts.filter(function (p) { return ids.indexOf(p.id) < 0; });
+      state.multi = []; state.sel = null; save(); render(); return;
+    }
     if (!state.sel) return;
     pushHistory();
     if (state.sel.kind === 'part') state.parts = state.parts.filter(function (p) { return p.id !== state.sel.id; });
