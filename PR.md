@@ -65,9 +65,9 @@ Full detail and sources: `NOTICE.md`.
 
 ## Not in v1 (roadmap)
 
-Rotation / vertical placement, more parts (push button, potentiometer, IC),
-full-size 63-column board toggle, the union-find wiring checker, draggable
-Arduino, PNG export. See `README.md`.
+More parts (push button, potentiometer, IC), full-size 63-column board toggle,
+the union-find wiring checker, draggable Arduino, PNG export. See `README.md`.
+(Rotation with `R`, horizontal or vertical across the ravine, has since shipped.)
 
 ## Screenshots
 

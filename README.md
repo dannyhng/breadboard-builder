@@ -21,7 +21,8 @@ matters).
 
 - A realistic breadboard with correctly grouped electrical holes (the a-e and
   f-j column groups and the power rails, just like a real board).
-- Place an **LED** or a **Resistor** from the palette. Legs snap to holes.
+- Place an **LED** or a **Resistor** from the palette. Legs snap to holes, and
+  **R** rotates them: horizontal or vertical, including across the ravine.
 - Draw colored **jumper wires** between any two holes (or to the Arduino's pins).
 - A stylized **Arduino UNO** below the board with wire-able 5V / GND / D13 / D12
   pins, so a full "blink an LED" circuit is buildable end to end.
@@ -37,6 +38,7 @@ matters).
 | --- | --- |
 | Place a part | Click `LED` or `Resistor`, then click the board |
 | Move a part | Drag it |
+| Rotate a part | While placing, or with a part selected, press `R` |
 | Draw a wire | Click `Wire`, click the first hole, click the second |
 | Wire color | The color swatch next to `Wire` |
 | Select | Click a part or wire (in Select mode) |
@@ -74,15 +76,18 @@ and drop-shadow budget. See the technique notes in `DESIGN.md`.
 
 ## Roadmap (next, in rough order)
 
-1. Rotate parts (90 degree steps) and vertical placement across the ravine.
-2. More parts: push button (4-leg, straddles the ravine), potentiometer, a DIP
+1. More parts: push button (4-leg, straddles the ravine), potentiometer, a DIP
    IC, jumper-less power.
-3. Full-size 63-column board as a toggle (current default is a 30-column board
+2. Full-size 63-column board as a toggle (current default is a 30-column board
    that fits a screen).
-4. The wiring checker: union-find over the electrical nodes to flag shorts,
-   floating pins, and "is D13 actually connected to the LED?".
-5. Draggable Arduino, and a small parts library.
-6. PNG export for lab reports.
+3. The wiring checker: union-find over the electrical nodes to flag shorts,
+   floating pins, and "is D13 actually connected to the LED?". (This also catches
+   a vertical part accidentally placed with both legs in the same half.)
+4. Draggable Arduino, and a small parts library.
+5. PNG export for lab reports.
+
+Shipped since the first commit: rotate parts with `R`, horizontal or vertical
+across the ravine.
 
 ## Art and licensing
 

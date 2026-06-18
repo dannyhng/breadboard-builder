@@ -1,13 +1,17 @@
 // app.js
 // The interactive tool: realistic breadboard + Arduino, place LED/Resistor parts
-// that snap to holes, draw jumper wires hole-to-hole, select + delete, autosave.
+// that snap to holes (rotate with R, horizontal OR vertical across the ravine),
+// draw jumper wires hole-to-hole, select + delete, autosave.
 //
 // Layers (back to front): board (static) | arduino (static) | wires | parts | overlay.
 // Holes are a <symbol> instanced with <use> (no per-instance filters: cheap).
+// A part stores its anchor hole + rotation; its second leg is DERIVED, so the
+// same data drives draw, drag, and rotate.
 
 (function () {
   'use strict';
   var NS = 'http://www.w3.org/2000/svg';
+  var ROWS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
 
   var board = window.buildBoard();
   var PARTS = window.PARTS;
@@ -75,7 +79,6 @@
     var ax = 120, ay = dims.height + 6, g = ardLayer;
     E('rect', { x: ax, y: ay, width: 360, height: 120, rx: 10, fill: 'url(#pcbGrad)', stroke: '#045158', 'stroke-width': 1.4, filter: 'url(#softbig)' }, g);
     E('rect', { x: ax + 8, y: ay + 8, width: 344, height: 104, rx: 6, fill: 'none', stroke: '#fff', 'stroke-width': 0.7, opacity: 0.3 }, g);
-    // top header with a few labeled, wire-able pins
     var hx = ax + 70, hy = ay + 12, n = 16;
     E('rect', { x: hx - 8, y: hy, width: n * 13 + 6, height: 16, rx: 3, fill: '#1c1c1c' }, g);
     var labels = { 0: '5V', 1: 'GND', 5: 'D13', 6: 'D12' };
@@ -124,13 +127,23 @@
   function occupied(holeId, exceptId) {
     return state.parts.some(function (p) { return p.id !== exceptId && p.legHoles.indexOf(holeId) >= 0; });
   }
-  // anchor a part's first leg, derive the second from its fixed span; null if invalid
-  function validLegs(type, anchorHole, exceptId) {
+  // derive both leg holes from an anchor hole + rotation (0=E, 1=S, 2=W, 3=N)
+  function deriveLegs(type, anchorHole, rot) {
     if (!anchorHole || anchorHole.rail) return null;
-    var leg2 = holeByCR(anchorHole.col + PARTS[type].span, anchorHole.row);
-    if (!leg2) return null;
-    if (occupied(anchorHole.id, exceptId) || occupied(leg2.id, exceptId)) return null;
-    return [anchorHole.id, leg2.id];
+    var span = PARTS[type].span, dc = 0, dr = 0;
+    if (rot === 0) dc = span; else if (rot === 2) dc = -span;
+    else if (rot === 1) dr = span; else if (rot === 3) dr = -span;
+    var ri = ROWS.indexOf(anchorHole.row) + dr;
+    if (ri < 0 || ri >= ROWS.length) return null;
+    var h2 = holeByCR(anchorHole.col + dc, ROWS[ri]);
+    if (!h2) return null;
+    return [anchorHole.id, h2.id];
+  }
+  function validLegs(type, anchorHole, rot, exceptId) {
+    var legs = deriveLegs(type, anchorHole, rot);
+    if (!legs) return null;
+    if (occupied(legs[0], exceptId) || occupied(legs[1], exceptId)) return null;
+    return legs;
   }
   function wirePath(x1, y1, x2, y2) {
     var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.min(70, Math.abs(x2 - x1) * 0.3 + 22);
@@ -141,6 +154,18 @@
     var m = svg.getScreenCTM(); if (!m) return { x: 0, y: 0 };
     var b = p.matrixTransform(m.inverse());
     return { x: b.x, y: b.y };
+  }
+  // draw a part (by its two leg-hole ids) into a group, oriented along its axis
+  function drawPartInto(parent, type, legHoles, opts, extraAttrs) {
+    var h0 = holesById[legHoles[0]], h1 = holesById[legHoles[1]];
+    if (!h0 || !h1) return null;
+    var dx = h1.x - h0.x, dy = h1.y - h0.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var ang = Math.atan2(dy, dx) * 180 / Math.PI;
+    var attrs = Object.assign({ transform: 'translate(' + h0.x + ' ' + h0.y + ') rotate(' + ang + ')' }, extraAttrs || {});
+    var g = E('g', attrs, parent);
+    PARTS[type].draw(function (n, a) { return E(n, a, g); }, len, opts || {});
+    return g;
   }
 
   // ---------- render dynamic layers ----------
@@ -160,10 +185,8 @@
     });
 
     state.parts.forEach(function (p) {
-      var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]]; if (!h0 || !h1) return;
-      var g = E('g', { 'data-part-id': p.id, style: 'cursor:grab' }, partLayer);
-      PARTS[p.type].draw(function (n, a) { return E(n, a, g); }, h0.x, h0.y, h1.x, h1.y, p);
-      if (state.sel && state.sel.kind === 'part' && state.sel.id === p.id) {
+      var g = drawPartInto(partLayer, p.type, p.legHoles, p, { 'data-part-id': p.id, style: 'cursor:grab' });
+      if (g && state.sel && state.sel.kind === 'part' && state.sel.id === p.id) {
         try {
           var bb = g.getBBox();
           E('rect', { x: bb.x - 3, y: bb.y - 3, width: bb.width + 6, height: bb.height + 6, rx: 5,
@@ -174,13 +197,11 @@
 
     if (state.placing) {
       var nh = nearestHole(lastPointer.x, lastPointer.y, true);
-      var legs = validLegs(state.placing.type, nh);
+      var legs = validLegs(state.placing.type, nh, state.placing.rot);
       if (legs) {
-        var a0 = holesById[legs[0]], a1 = holesById[legs[1]];
-        var gg = E('g', { opacity: 0.85 }, overlay);
-        PARTS[state.placing.type].draw(function (n, at) { return E(n, at, gg); }, a0.x, a0.y, a1.x, a1.y, {});
-        E('circle', { cx: a0.x, cy: a0.y, r: 6.5, fill: 'none', stroke: '#27c93f', 'stroke-width': 2 }, overlay);
-        E('circle', { cx: a1.x, cy: a1.y, r: 6.5, fill: 'none', stroke: '#27c93f', 'stroke-width': 2 }, overlay);
+        drawPartInto(overlay, state.placing.type, legs, {}, { opacity: 0.85 });
+        E('circle', { cx: holesById[legs[0]].x, cy: holesById[legs[0]].y, r: 6.5, fill: 'none', stroke: '#27c93f', 'stroke-width': 2 }, overlay);
+        E('circle', { cx: holesById[legs[1]].x, cy: holesById[legs[1]].y, r: 6.5, fill: 'none', stroke: '#27c93f', 'stroke-width': 2 }, overlay);
       } else if (nh) {
         E('circle', { cx: nh.x, cy: nh.y, r: 7, fill: 'none', stroke: '#e33', 'stroke-width': 2 }, overlay);
       }
@@ -199,7 +220,8 @@
   function updateStatus() {
     var s = document.getElementById('status');
     if (!s) return;
-    var mode = state.placing ? ('placing ' + state.placing.type) : (state.tool === 'wire' ? (state.wireDraft ? 'wire: pick 2nd hole' : 'wire: pick 1st hole') : 'select');
+    var mode = state.placing ? ('placing ' + state.placing.type + ' (R to rotate)')
+      : (state.tool === 'wire' ? (state.wireDraft ? 'wire: pick 2nd hole' : 'wire: pick 1st hole') : 'select');
     s.textContent = state.parts.length + ' parts, ' + state.wires.length + ' wires  |  ' + mode;
   }
 
@@ -208,19 +230,20 @@
     lastPointer = toBoard(e);
     if (state.placing || state.wireDraft) { render(); return; }
     if (drag) {
-      var legs = validLegs(drag.type, nearestHole(lastPointer.x, lastPointer.y, true), drag.id);
-      if (legs) { var p = byId(drag.id); if (p) { p.legHoles = legs; drag.moved = true; render(); } }
+      var p = byId(drag.id); if (!p) return;
+      var legs = validLegs(p.type, nearestHole(lastPointer.x, lastPointer.y, true), p.rot, p.id);
+      if (legs) { p.anchor = legs[0]; p.legHoles = legs; drag.moved = true; render(); }
     }
   });
 
   svg.addEventListener('pointerdown', function (e) {
     lastPointer = toBoard(e);
-    if (state.placing || state.tool === 'wire') return; // these commit on click
+    if (state.placing || state.tool === 'wire') return; // commit on click
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
     if (partEl) {
-      var id = +partEl.getAttribute('data-part-id'); var p = byId(id);
+      var id = +partEl.getAttribute('data-part-id');
       state.sel = { kind: 'part', id: id };
-      if (p) drag = { id: id, type: p.type, moved: false };
+      if (byId(id)) drag = { id: id, moved: false };
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       render(); return;
     }
@@ -236,11 +259,11 @@
   svg.addEventListener('click', function (e) {
     var pt = toBoard(e);
     if (state.placing) {
-      var legs = validLegs(state.placing.type, nearestHole(pt.x, pt.y, true));
+      var legs = validLegs(state.placing.type, nearestHole(pt.x, pt.y, true), state.placing.rot);
       if (legs) {
-        state.parts.push({ id: state.nextId++, type: state.placing.type, legHoles: legs });
-        state.placing = null; document.body.classList.remove('placing'); clearActive(); setActiveAction('select');
-        state.tool = 'select'; save(); render();
+        state.parts.push({ id: state.nextId++, type: state.placing.type, anchor: legs[0], rot: state.placing.rot, legHoles: legs });
+        state.placing = null; document.body.classList.remove('placing'); setActiveAction('select'); state.tool = 'select';
+        save(); render();
       }
       return;
     }
@@ -258,8 +281,22 @@
   });
 
   window.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') { state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
+    var k = e.key;
+    if (k === 'Escape') { state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return; }
+    if (k === 'r' || k === 'R') {
+      if (state.placing) { state.placing.rot = (state.placing.rot + 1) % 4; render(); e.preventDefault(); return; }
+      if (state.sel && state.sel.kind === 'part') {
+        var p = byId(state.sel.id);
+        if (p) {
+          var nr = (p.rot + 1) % 4;
+          var legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
+          if (legs) { p.rot = nr; p.legHoles = legs; save(); render(); }
+        }
+        e.preventDefault();
+      }
+      return;
+    }
+    if (k === 'Delete' || k === 'Backspace') {
       if (state.sel) {
         if (state.sel.kind === 'part') state.parts = state.parts.filter(function (p) { return p.id !== state.sel.id; });
         else state.wires = state.wires.filter(function (w) { return w.id !== state.sel.id; });
@@ -279,7 +316,7 @@
     var act = b.getAttribute('data-action');
     if (act === 'select') { state.tool = 'select'; state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); setActiveEl(b); }
     else if (act === 'wire') { state.tool = 'wire'; state.placing = null; document.body.classList.remove('placing'); setActiveEl(b); }
-    else if (act === 'place') { state.tool = 'select'; state.wireDraft = null; state.placing = { type: b.getAttribute('data-part') }; document.body.classList.add('placing'); setActiveEl(b); }
+    else if (act === 'place') { state.tool = 'select'; state.wireDraft = null; state.placing = { type: b.getAttribute('data-part'), rot: 0 }; document.body.classList.add('placing'); setActiveEl(b); }
     else if (act === 'export') exportJSON();
     else if (act === 'import') document.getElementById('file').click();
     else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); } }
@@ -295,23 +332,29 @@
 
   // ---------- persistence ----------
   var KEY = 'breadboard.layout.v1';
+  function normalizePart(p) {
+    // tolerate old saves that lack anchor/rot
+    if (p.rot == null) p.rot = 0;
+    if (p.anchor == null && p.legHoles) p.anchor = p.legHoles[0];
+    return p;
+  }
+  function validPart(p) { return p.legHoles && PARTS[p.type] && holesById[p.legHoles[0]] && holesById[p.legHoles[1]]; }
   function snapshot() { return { version: 1, parts: state.parts, wires: state.wires, nextId: state.nextId }; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (_) {} }
-  function importData(o) {
-    if (!o || o.version !== 1) { window.alert('Unsupported layout version.'); return; }
-    state.parts = (o.parts || []).filter(function (p) { return p.legHoles && PARTS[p.type] && holesById[p.legHoles[0]] && holesById[p.legHoles[1]]; });
+  function adopt(o) {
+    state.parts = (o.parts || []).map(normalizePart).filter(validPart);
     state.wires = (o.wires || []).filter(function (w) { return connXY(w.from) && connXY(w.to); });
     state.nextId = o.nextId || (state.parts.length + state.wires.length + 10);
-    state.sel = null; save(); render();
+  }
+  function importData(o) {
+    if (!o || o.version !== 1) { window.alert('Unsupported layout version.'); return; }
+    adopt(o); state.sel = null; save(); render();
   }
   function loadSaved() {
     try {
       var s = localStorage.getItem(KEY); if (!s) return false;
       var o = JSON.parse(s); if (!o || o.version !== 1) return false;
-      state.parts = (o.parts || []).filter(function (p) { return p.legHoles && PARTS[p.type] && holesById[p.legHoles[0]] && holesById[p.legHoles[1]]; });
-      state.wires = (o.wires || []).filter(function (w) { return connXY(w.from) && connXY(w.to); });
-      state.nextId = o.nextId || (state.parts.length + state.wires.length + 10);
-      return true;
+      adopt(o); return true;
     } catch (_) { return false; }
   }
   function exportJSON() {
@@ -324,12 +367,17 @@
     } catch (_) {}
   }
 
-  // first-run demo so an empty board still shows the realistic look + a blink-an-LED wiring
+  // first-run demo: realistic look + a blink-an-LED wiring
   function seedDemo() {
-    var r1 = holeByCR(12, 'b'), r2 = holeByCR(17, 'b');
-    var l1 = holeByCR(19, 'b'), l2 = holeByCR(21, 'b');
-    if (r1 && r2) state.parts.push({ id: state.nextId++, type: 'resistor', legHoles: [r1.id, r2.id] });
-    if (l1 && l2) state.parts.push({ id: state.nextId++, type: 'led', legHoles: [l1.id, l2.id] });
+    function part(type, c, r) {
+      var anchor = holeByCR(c, r); if (!anchor) return null;
+      var legs = deriveLegs(type, anchor, 0); if (!legs) return null;
+      var p = { id: state.nextId++, type: type, anchor: legs[0], rot: 0, legHoles: legs };
+      state.parts.push(p); return p;
+    }
+    part('resistor', 12, 'b');
+    part('led', 19, 'b');
+    var r1 = holeByCR(12, 'b'), l2 = holeByCR(21, 'b');
     if (ardPins['ARD-D13'] && r1) state.wires.push({ id: 'w' + state.nextId++, from: 'ARD-D13', to: r1.id, color: '#1f9d3a' });
     if (ardPins['ARD-GND'] && l2) state.wires.push({ id: 'w' + state.nextId++, from: l2.id, to: 'ARD-GND', color: '#111' });
     save();
