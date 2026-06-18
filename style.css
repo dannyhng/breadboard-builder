@@ -33,6 +33,8 @@ body {
 }
 .toolbar button:hover { background: #353541; }
 .toolbar button.active { background: #2f6fd6; border-color: #2f6fd6; color: #fff; }
+.toolbar button:disabled { opacity: 0.4; cursor: default; }
+.toolbar button:disabled:hover { background: #2c2c34; }
 
 #wireColor { width: 28px; height: 28px; border: none; background: none; padding: 0; cursor: pointer; }
 

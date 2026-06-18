@@ -25,15 +25,17 @@
 
   function drawResistor(mk, len, opts) {
     var bands = (opts && opts.bands) || ['#b8392b', '#b8392b', '#5b3a1e', '#d4af37'];
-    var bs = Math.max(10, len * 0.20), be = Math.min(len - 10, len * 0.80);
-    if (be <= bs) { bs = len * 0.3; be = len * 0.7; }
-    var w = be - bs, bh = 18;
+    // fixed body length: the leads stretch with span, the body never distorts
+    // (this is what keeps a vertical part crossing the ravine from stretching).
+    var BODY = 46, bh = 18, bs, be;
+    if (len > BODY + 16) { bs = (len - BODY) / 2; be = bs + BODY; }
+    else { bs = len * 0.2; be = len * 0.8; }
+    var w = be - bs;
     mk('line', { x1: 0, y1: 0, x2: bs, y2: 0, stroke: 'url(#metalGrad)', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
     mk('line', { x1: len, y1: 0, x2: be, y2: 0, stroke: 'url(#metalGrad)', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
     mk('rect', { x: bs, y: -bh / 2, width: w, height: bh, rx: bh / 2, fill: 'url(#resGrad)', stroke: '#8a6a30', 'stroke-width': 0.9, filter: 'url(#soft)' });
     bands.forEach(function (c, i) {
-      var bx = bs + Math.min(w - 6, 8 + i * 7);
-      mk('rect', { x: bx, y: -bh / 2, width: 4, height: bh, fill: c });
+      mk('rect', { x: bs + 10 + i * 8, y: -bh / 2, width: 4, height: bh, fill: c });
     });
   }
 

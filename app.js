@@ -106,6 +106,7 @@
   var lastPointer = { x: dims.width / 2, y: 80 };
   var drag = null;
   var nets = null;
+  var history = [], future = [];
 
   // ---------- geometry helpers ----------
   function byId(id) { for (var i = 0; i < state.parts.length; i++) if (state.parts[i].id === id) return state.parts[i]; return null; }
@@ -321,7 +322,7 @@
     if (partEl) {
       var id = +partEl.getAttribute('data-part-id');
       state.sel = { kind: 'part', id: id };
-      if (byId(id)) drag = { id: id, moved: false };
+      if (byId(id)) drag = { id: id, moved: false, before: JSON.stringify(snapshot()) };
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       render(); return;
     }
@@ -331,7 +332,10 @@
   });
 
   window.addEventListener('pointerup', function () {
-    if (drag) { if (drag.moved) save(); drag = null; }
+    if (drag) {
+      if (drag.moved) { try { history.push(drag.before); if (history.length > 120) history.shift(); future.length = 0; } catch (_) {} updateUndoButtons(); save(); }
+      drag = null;
+    }
   });
 
   svg.addEventListener('pointerleave', function () {
@@ -343,6 +347,7 @@
     if (state.placing) {
       var legs = validLegs(state.placing.type, nearestHole(pt.x, pt.y, true), state.placing.rot);
       if (legs) {
+        pushHistory();
         state.parts.push({ id: state.nextId++, type: state.placing.type, anchor: legs[0], rot: state.placing.rot, legHoles: legs });
         state.placing = null; document.body.classList.remove('placing'); setActiveAction('select'); state.tool = 'select';
         save(); render();
@@ -354,8 +359,10 @@
       if (c.conn && c.dist < 16) {
         if (!state.wireDraft) state.wireDraft = { from: c.conn.id };
         else if (c.conn.id !== state.wireDraft.from) {
-          state.wires.push({ id: 'w' + state.nextId++, from: state.wireDraft.from, to: c.conn.id, color: wireColor });
-          state.wireDraft = null; save();
+          var fr = state.wireDraft.from, to = c.conn.id;
+          var dup = state.wires.some(function (w) { return (w.from === fr && w.to === to) || (w.from === to && w.to === fr); });
+          if (!dup) { pushHistory(); state.wires.push({ id: 'w' + state.nextId++, from: fr, to: to, color: wireColor }); save(); }
+          state.wireDraft = null;
         }
         render();
       }
@@ -364,6 +371,8 @@
 
   window.addEventListener('keydown', function (e) {
     var k = e.key;
+    if ((e.ctrlKey || e.metaKey) && (k === 'z' || k === 'Z')) { if (e.shiftKey) redo(); else undo(); e.preventDefault(); return; }
+    if ((e.ctrlKey || e.metaKey) && (k === 'y' || k === 'Y')) { redo(); e.preventDefault(); return; }
     if (k === 'Escape') { state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return; }
     if (k === 'r' || k === 'R') {
       if (state.placing) { state.placing.rot = (state.placing.rot + 1) % 4; render(); e.preventDefault(); return; }
@@ -372,7 +381,7 @@
         if (p) {
           var nr = (p.rot + 1) % 4;
           var legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
-          if (legs) { p.rot = nr; p.legHoles = legs; save(); render(); }
+          if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); render(); }
         }
         e.preventDefault();
       }
@@ -380,6 +389,7 @@
     }
     if (k === 'Delete' || k === 'Backspace') {
       if (state.sel) {
+        pushHistory();
         if (state.sel.kind === 'part') state.parts = state.parts.filter(function (p) { return p.id !== state.sel.id; });
         else state.wires = state.wires.filter(function (w) { return w.id !== state.sel.id; });
         state.sel = null; save(); render(); e.preventDefault();
@@ -399,9 +409,11 @@
     if (act === 'select') { state.tool = 'select'; state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); setActiveEl(b); }
     else if (act === 'wire') { state.tool = 'wire'; state.placing = null; document.body.classList.remove('placing'); setActiveEl(b); }
     else if (act === 'place') { state.tool = 'select'; state.wireDraft = null; state.placing = { type: b.getAttribute('data-part'), rot: 0 }; document.body.classList.add('placing'); setActiveEl(b); }
+    else if (act === 'undo') { undo(); return; }
+    else if (act === 'redo') { redo(); return; }
     else if (act === 'export') exportJSON();
     else if (act === 'import') document.getElementById('file').click();
-    else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); } }
+    else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); } }
     render();
   });
   document.getElementById('wireColor').addEventListener('input', function (e) { wireColor = e.target.value; });
@@ -423,9 +435,27 @@
     state.wires = (o.wires || []).filter(function (w) { return connXY(w.from) && connXY(w.to); });
     state.nextId = o.nextId || (state.parts.length + state.wires.length + 10);
   }
+
+  // ---------- undo / redo (snapshot history; state is tiny) ----------
+  function pushHistory() {
+    try { history.push(JSON.stringify(snapshot())); if (history.length > 120) history.shift(); } catch (_) {}
+    future.length = 0;
+    updateUndoButtons();
+  }
+  function applySnap(snap) {
+    adopt(snap); state.sel = null; state.placing = null; state.wireDraft = null;
+    document.body.classList.remove('placing'); save(); render(); updateUndoButtons();
+  }
+  function undo() { if (!history.length) return; future.push(JSON.stringify(snapshot())); applySnap(JSON.parse(history.pop())); }
+  function redo() { if (!future.length) return; history.push(JSON.stringify(snapshot())); applySnap(JSON.parse(future.pop())); }
+  function updateUndoButtons() {
+    var u = document.querySelector('[data-action="undo"]'), r = document.querySelector('[data-action="redo"]');
+    if (u) u.disabled = !history.length;
+    if (r) r.disabled = !future.length;
+  }
   function importData(o) {
     if (!o || o.version !== 1) { window.alert('Unsupported layout version.'); return; }
-    adopt(o); state.sel = null; save(); render();
+    pushHistory(); adopt(o); state.sel = null; save(); render();
   }
   function loadSaved() {
     try {
@@ -461,4 +491,5 @@
   if (!loadSaved()) seedDemo();
   setActiveAction('select');
   render();
+  updateUndoButtons();
 })();
