@@ -251,6 +251,14 @@
     for (var i = 0; i < legs.length; i++) if (occupied(legs[i], exceptId)) return null;
     return legs;
   }
+  // straddle parts (DIPs / displays) must cross the center ravine. Snap their anchor
+  // to row e so the top legs land in row e and the bottom legs in row f, on opposite
+  // strips. Placed any other way, a DIP shorts its top pins to its bottom pins.
+  function placeAnchor(type, x, y) {
+    var nh = nearestHole(x, y, true);
+    if (nh && PARTS[type] && PARTS[type].straddle) { var across = holeByCR(nh.col, 'e'); if (across) return across; }
+    return nh;
+  }
   function nextLabel(type) {
     var pre = (PARTS[type] && PARTS[type].prefix) || 'P', used = {};
     state.parts.forEach(function (p) { if (p.label) used[p.label] = true; });
@@ -400,6 +408,14 @@
       if (h0 && h1 && h0.node === h1.node) viol('err', 'shorted_part', find(h0.node), (p.label || PARTS[p.type].label) + ' is shorted (both legs on the same strip).', 'Move one leg to another column.', [p.id]);
     });
 
+    // shorted IC / display pins: a straddle part with two legs landing on the same strip
+    state.parts.forEach(function (p) {
+      if (!PARTS[p.type].straddle) return;
+      var seen = {}, bad = false;
+      p.legHoles.forEach(function (hid) { var h = holesById[hid]; if (!h) return; var r = find(h.node); if (seen[r]) bad = true; seen[r] = true; });
+      if (bad) viol('err', 'shorted_pins', null, (p.label || PARTS[p.type].label) + ' has pins shorted together.', 'Place it straddling the center ravine so its two rows sit on opposite strips.', [p.id]);
+    });
+
     // LED missing-resistor / reversed (supply = + rails & 5V/3V3/VIN; ground = - rails & GND)
     var supRoots = ['rail-top-plus', 'rail-bot-plus', 'ARD-5V', 'ARD-3V3', 'ARD-VIN'].map(find);
     var gndRoots = ['rail-top-minus', 'rail-bot-minus', 'ARD-GND', 'ARD-GND2', 'ARD-GND3'].map(find);
@@ -504,7 +520,7 @@
     });
 
     if (state.placing) {
-      var nh = nearestHole(lastPointer.x, lastPointer.y, true);
+      var nh = placeAnchor(state.placing.type, lastPointer.x, lastPointer.y);
       var legs = validLegs(state.placing.type, nh, state.placing.rot);
       if (legs) {
         drawPartInto(overlay, state.placing.type, legs, {}, { opacity: 0.85 });
@@ -592,7 +608,7 @@
       h += '<button data-insp="flip">Flip polarity</button>';
       h += '<div class="insp-note">The marked band is the cathode (minus).</div>';
     }
-    h += '<div class="insp-row"><button data-insp="rotate">Rotate</button><button data-insp="delete">Delete</button></div>';
+    h += '<div class="insp-row">' + (PARTS[p.type].straddle ? '' : '<button data-insp="rotate">Rotate</button>') + '<button data-insp="delete">Delete</button></div>';
     el.innerHTML = h;
   }
 
@@ -611,7 +627,7 @@
     var sig = p.id + '|' + p.type;
     if (sig !== _fbSig) {
       _fbSig = sig;
-      var html = '<button data-action="rotate-sel" title="Rotate (])">↻</button>';
+      var html = PARTS[p.type].straddle ? '' : '<button data-action="rotate-sel" title="Rotate (])">↻</button>';
       if (PARTS[p.type].polar) html += '<button data-action="flip-sel" title="Flip polarity">⇄</button>';
       html += '<button data-action="dup" title="Duplicate (Ctrl+D)">⧉</button>';
       html += '<button data-action="del" title="Delete">✕</button>';
@@ -630,7 +646,7 @@
       if (drag.group) { dragGroup(); return; }
       var p = byId(drag.id);
       if (p) {
-        var legs = validLegs(p.type, nearestHole(lastPointer.x, lastPointer.y, true), p.rot, p.id);
+        var legs = validLegs(p.type, placeAnchor(p.type, lastPointer.x, lastPointer.y), p.rot, p.id);
         if (legs) { p.anchor = legs[0]; p.legHoles = legs; drag.moved = true; render(); }
       }
       return;
@@ -724,7 +740,7 @@
   svg.addEventListener('click', function (e) {
     var pt = toBoard(e);
     if (state.placing) {
-      var legs = validLegs(state.placing.type, nearestHole(pt.x, pt.y, true), state.placing.rot);
+      var legs = validLegs(state.placing.type, placeAnchor(state.placing.type, pt.x, pt.y), state.placing.rot);
       if (legs) {
         pushHistory();
         var np = { id: state.nextId++, type: state.placing.type, anchor: legs[0], rot: state.placing.rot, legHoles: legs };
@@ -809,9 +825,9 @@
     setActiveEl(bin ? bin.querySelector('[data-part="' + type + '"]') : null); render();
   }
   function rotateSelectedBy(delta) {
-    if (state.placing) { state.placing.rot = ((state.placing.rot + delta) % 4 + 4) % 4; render(); return; }
+    if (state.placing) { if (PARTS[state.placing.type].straddle) return; state.placing.rot = ((state.placing.rot + delta) % 4 + 4) % 4; render(); return; }
     if (!state.sel || state.sel.kind !== 'part') return;
-    var p = byId(state.sel.id); if (!p) return;
+    var p = byId(state.sel.id); if (!p || PARTS[p.type].straddle) return; // DIPs are locked to straddling the ravine
     var nr = ((p.rot + delta) % 4 + 4) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
     if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); render(); }
   }
