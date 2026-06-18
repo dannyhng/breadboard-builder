@@ -2,11 +2,10 @@
 // Part definitions as DATA. Each part declares its legs (offsets from the anchor
 // hole, in column/row deltas at rotation 0), a label prefix, and a draw().
 //
-// Two draw styles:
 //   axis:true  -> 2-leg parts. draw(mk, len, opts) in a local frame the app
 //                 rotates (leg 1 at 0,0, leg 2 at len,0).
-//   axis:false -> N-leg parts. draw(mk, legCoords, opts) in board coords
-//                 (legCoords = [{x,y}, ...] of every leg hole).
+//   axis:false -> N-leg parts. draw(mk, legCoords, opts) in board coords.
+// Optional: values [..] (Inspector value dropdown), polar (has a Flip control).
 
 (function (root) {
   'use strict';
@@ -48,8 +47,7 @@
     mk('circle', { cx: mx, cy: domeCy, r: 15, fill: 'url(#' + meta.grad + ')', stroke: meta.stroke, 'stroke-width': 0.8 });
     mk('ellipse', { cx: mx - 5, cy: domeCy - 6, rx: 5, ry: 7.5, fill: '#ffffff', opacity: 0.5,
       transform: 'rotate(-18 ' + (mx - 5) + ' ' + (domeCy - 6) + ')' });
-    var cathodeRight = !flip;
-    mk('rect', { x: cathodeRight ? (mx + 11) : (mx - 15), y: baseY - 6, width: 4, height: 10, fill: '#222', opacity: 0.85 });
+    mk('rect', { x: (!flip) ? (mx + 11) : (mx - 15), y: baseY - 6, width: 4, height: 10, fill: '#222', opacity: 0.85 });
   }
 
   function drawResistor(mk, len, opts) {
@@ -71,10 +69,61 @@
     mk('circle', { cx: mx, cy: cy, r: r, fill: '#181818', stroke: '#000', 'stroke-width': 1, filter: 'url(#soft)' });
     mk('circle', { cx: mx, cy: cy, r: r - 3, fill: '#242424' });
     mk('circle', { cx: mx, cy: cy - 1, r: 3.5, fill: '#0a0a0a' });
-    // small "+" near the first leg
     mk('line', { x1: 7, y1: -9, x2: 7, y2: -3, stroke: '#ddd', 'stroke-width': 1.4 });
     mk('line', { x1: 4, y1: -6, x2: 10, y2: -6, stroke: '#ddd', 'stroke-width': 1.4 });
   }
+
+  function drawCapacitor(mk, len, opts) {
+    var mx = len / 2, by = -16;
+    mk('line', { x1: 0, y1: 0, x2: mx - 5, y2: by + 4, stroke: 'url(#metalGrad)', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
+    mk('line', { x1: len, y1: 0, x2: mx + 5, y2: by + 4, stroke: 'url(#metalGrad)', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
+    mk('ellipse', { cx: mx, cy: by, rx: 15, ry: 12, fill: '#dba24c', stroke: '#9a6e2a', 'stroke-width': 0.9, filter: 'url(#soft)' });
+    mk('ellipse', { cx: mx - 4, cy: by - 4, rx: 5, ry: 4, fill: '#ffffff', opacity: 0.22 });
+  }
+
+  function drawDiode(mk, len, opts) {
+    var flip = !!(opts && opts.flip);
+    var by = -2, bw = 26, bh = 12, bx1 = (len - bw) / 2, bx2 = bx1 + bw;
+    mk('line', { x1: 0, y1: 0, x2: bx1, y2: by, stroke: 'url(#metalGrad)', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
+    mk('line', { x1: len, y1: 0, x2: bx2, y2: by, stroke: 'url(#metalGrad)', 'stroke-width': 2.4, 'stroke-linecap': 'round' });
+    mk('rect', { x: bx1, y: by - bh / 2, width: bw, height: bh, rx: 2, fill: '#1a1a1a', stroke: '#000', 'stroke-width': 0.8, filter: 'url(#soft)' });
+    mk('rect', { x: flip ? (bx1 + 2.5) : (bx2 - 5.5), y: by - bh / 2, width: 3, height: bh, fill: '#dcdcdc' });
+  }
+
+  function drawPot(mk, coords, opts) {
+    var xs = coords.map(function (c) { return c.x; }), ys = coords.map(function (c) { return c.y; });
+    var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+    var cy = Math.min.apply(null, ys), cx = (minX + maxX) / 2, topY = cy - 40;
+    coords.forEach(function (c) { mk('line', { x1: c.x, y1: c.y, x2: c.x, y2: topY + 26, stroke: 'url(#metalGrad)', 'stroke-width': 2.2, 'stroke-linecap': 'round' }); });
+    mk('rect', { x: minX - 6, y: topY, width: (maxX - minX) + 12, height: 28, rx: 3, fill: '#2a4a8a', stroke: '#16264a', 'stroke-width': 1, filter: 'url(#soft)' });
+    mk('circle', { cx: cx, cy: topY + 13, r: 10, fill: '#cfcfcf', stroke: '#8a8a8a', 'stroke-width': 1 });
+    mk('rect', { x: cx - 1.2, y: topY + 6, width: 2.4, height: 14, rx: 1, fill: '#555' });
+  }
+
+  function drawIC(mk, coords, opts) {
+    var xs = coords.map(function (c) { return c.x; }), ys = coords.map(function (c) { return c.y; });
+    var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+    var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+    var bx = minX - 4, bw = (maxX - minX) + 8, by = minY, bh = (maxY - minY), midY = (minY + maxY) / 2;
+    coords.forEach(function (c) {
+      var ey = c.y < midY ? by : by + bh;
+      mk('rect', { x: c.x - 1.6, y: Math.min(c.y, ey), width: 3.2, height: Math.abs(c.y - ey) + 1, fill: '#9a9a9a' });
+    });
+    mk('rect', { x: bx, y: by, width: bw, height: bh, rx: 3, fill: '#161616', stroke: '#000', 'stroke-width': 0.8, filter: 'url(#soft)' });
+    mk('path', { d: 'M ' + (bx + bw / 2 - 6) + ' ' + by + ' A 6 6 0 0 0 ' + (bx + bw / 2 + 6) + ' ' + by + ' Z', fill: '#0a0a0a' });
+    mk('circle', { cx: bx + 7, cy: by + 7, r: 1.8, fill: '#444' });
+  }
+
+  root.PARTS = {
+    led:           { label: 'LED',           prefix: 'LED', axis: true,  polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawLED,       defaults: { color: 'red', flip: false } },
+    resistor:      { label: 'Resistor',      prefix: 'R',   axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 5, dr: 0 }], draw: drawResistor, defaults: { value: '220' } },
+    capacitor:     { label: 'Capacitor',     prefix: 'C',   axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawCapacitor, defaults: {} },
+    diode:         { label: 'Diode',         prefix: 'D',   axis: true,  polar: true, legs: [{ dc: 0, dr: 0 }, { dc: 3, dr: 0 }], draw: drawDiode, defaults: { flip: false } },
+    buzzer:        { label: 'Buzzer',        prefix: 'BZ',  axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawBuzzer, defaults: {} },
+    button:        { label: 'Button',        prefix: 'S',   axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 0, dr: 2 }, { dc: 2, dr: 2 }], draw: drawButton, defaults: {} },
+    potentiometer: { label: 'Potentiometer', prefix: 'RV',  axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 4, dr: 0 }], draw: drawPot, values: ['1k', '10k', '100k'], defaults: { value: '10k' } },
+    ic:            { label: 'IC (8-pin)',    prefix: 'U',   axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 1, dr: 0 }, { dc: 2, dr: 0 }, { dc: 3, dr: 0 }, { dc: 0, dr: 1 }, { dc: 1, dr: 1 }, { dc: 2, dr: 1 }, { dc: 3, dr: 1 }], draw: drawIC, defaults: {} }
+  };
 
   function drawButton(mk, coords, opts) {
     var xs = coords.map(function (c) { return c.x; }), ys = coords.map(function (c) { return c.y; });
@@ -91,12 +140,6 @@
     mk('circle', { cx: cx - br * 0.3, cy: cy - br * 0.3, r: br * 0.42, fill: '#e06a5a', opacity: 0.5 });
   }
 
-  root.PARTS = {
-    led:      { label: 'LED',      prefix: 'LED', axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawLED,      defaults: { color: 'red', flip: false } },
-    resistor: { label: 'Resistor', prefix: 'R',   axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 5, dr: 0 }], draw: drawResistor, defaults: { value: '220' } },
-    buzzer:   { label: 'Buzzer',   prefix: 'BZ',  axis: true,  legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }], draw: drawBuzzer,   defaults: {} },
-    button:   { label: 'Button',   prefix: 'S',   axis: false, legs: [{ dc: 0, dr: 0 }, { dc: 2, dr: 0 }, { dc: 0, dr: 2 }, { dc: 2, dr: 2 }], draw: drawButton, defaults: {} }
-  };
   root.RES_VALUES = RES_VALUES;
   root.LED_COLORS = LED_COLORS;
   if (typeof module !== 'undefined' && module.exports) module.exports = { PARTS: root.PARTS, RES_VALUES: RES_VALUES, LED_COLORS: LED_COLORS };

@@ -550,11 +550,19 @@
       h += '<label>Resistance</label><select data-insp="value">';
       window.RES_VALUES.forEach(function (o) { h += '<option value="' + o.v + '"' + (o.v === (p.value || '220') ? ' selected' : '') + '>' + o.v + ' Ω</option>'; });
       h += '</select>';
-    } else if (p.type === 'led') {
+    } else if (PARTS[p.type].values) {
+      h += '<label>Value</label><select data-insp="value">';
+      PARTS[p.type].values.forEach(function (v) { h += '<option' + (v === (p.value || '') ? ' selected' : '') + '>' + v + '</option>'; });
+      h += '</select>';
+    }
+    if (p.type === 'led') {
       h += '<label>Color</label><select data-insp="color">';
       Object.keys(window.LED_COLORS).forEach(function (c) { h += '<option value="' + c + '"' + (c === (p.color || 'red') ? ' selected' : '') + '>' + c + '</option>'; });
       h += '</select><button data-insp="flip">Flip polarity</button>';
       h += '<div class="insp-note">The marked side is the cathode (minus).</div>';
+    } else if (PARTS[p.type].polar) {
+      h += '<button data-insp="flip">Flip polarity</button>';
+      h += '<div class="insp-note">The marked band is the cathode (minus).</div>';
     }
     h += '<div class="insp-row"><button data-insp="rotate">Rotate</button><button data-insp="delete">Delete</button></div>';
     el.innerHTML = h;
@@ -576,7 +584,7 @@
     if (sig !== _fbSig) {
       _fbSig = sig;
       var html = '<button data-action="rotate-sel" title="Rotate (])">↻</button>';
-      if (p.type === 'led') html += '<button data-action="flip-sel" title="Flip polarity">⇄</button>';
+      if (PARTS[p.type].polar) html += '<button data-action="flip-sel" title="Flip polarity">⇄</button>';
       html += '<button data-action="dup" title="Duplicate (Ctrl+D)">⧉</button>';
       html += '<button data-action="del" title="Delete">✕</button>';
       fb.innerHTML = html;
@@ -807,7 +815,7 @@
   }
   function flipSelected() {
     if (!state.sel || state.sel.kind !== 'part') return;
-    var p = byId(state.sel.id); if (!p || p.type !== 'led') return;
+    var p = byId(state.sel.id); if (!p || !PARTS[p.type].polar) return;
     pushHistory(); p.flip = !p.flip; _inspSig = ''; save(); render();
   }
 
@@ -922,6 +930,10 @@
     { name: 'Place LED', key: 'L', run: function () { choosePlace('led'); } },
     { name: 'Place button', key: 'B', run: function () { choosePlace('button'); } },
     { name: 'Place buzzer', key: '', run: function () { choosePlace('buzzer'); } },
+    { name: 'Place capacitor', key: '', run: function () { choosePlace('capacitor'); } },
+    { name: 'Place diode', key: '', run: function () { choosePlace('diode'); } },
+    { name: 'Place potentiometer', key: '', run: function () { choosePlace('potentiometer'); } },
+    { name: 'Place IC (8-pin)', key: '', run: function () { choosePlace('ic'); } },
     { name: 'Rotate selection', key: '] / [', run: function () { rotateSelectedBy(1); } },
     { name: 'Duplicate selection', key: 'Ctrl D', run: duplicateSelected },
     { name: 'Undo', key: 'Ctrl Z', run: undo },
