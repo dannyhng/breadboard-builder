@@ -203,6 +203,29 @@ body.wiring #board { cursor: crosshair; }
 .palette-item .pk { color: var(--text-3); font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
 .palette-empty { padding: 14px 16px; color: var(--text-3); font-size: 13px; }
 
+.float-toolbar {
+  position: fixed; z-index: 40; transform: translate(-50%, -100%);
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 7px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  animation: fb-in var(--dur-fast) var(--ease-out);
+}
+@keyframes fb-in { from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); } to { opacity: 1; } }
+.float-toolbar button {
+  width: 28px; height: 26px; border: none; background: transparent; color: var(--text-1);
+  border-radius: 5px; cursor: pointer; font-size: 15px; line-height: 1;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.float-toolbar button:hover { background: var(--surface-3); }
+
+.ctxmenu {
+  position: fixed; z-index: 50; min-width: 152px; padding: 4px;
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.ctx-item { padding: 6px 10px; border-radius: 5px; cursor: pointer; font-size: 13px; color: var(--text-1); }
+.ctx-item:hover { background: var(--surface-3); }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

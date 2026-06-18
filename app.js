@@ -485,6 +485,7 @@
     updateStatus();
     renderIssues();
     renderInspector();
+    updateFloatbar();
   }
 
   function updateStatus() {
@@ -534,6 +535,29 @@
     }
     h += '<div class="insp-row"><button data-insp="rotate">Rotate</button><button data-insp="delete">Delete</button></div>';
     el.innerHTML = h;
+  }
+
+  var _fbSig = '';
+  function updateFloatbar() {
+    var fb = document.getElementById('floatbar'); if (!fb) return;
+    var p = (state.sel && state.sel.kind === 'part') ? byId(state.sel.id) : null;
+    if (!p || state.placing || state.tool === 'wire') { fb.hidden = true; _fbSig = ''; return; }
+    var xs = [], ys = [];
+    p.legHoles.forEach(function (id) { var h = holesById[id]; if (h) { xs.push(h.x); ys.push(h.y); } });
+    if (!xs.length) { fb.hidden = true; return; }
+    var bx = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2, by = Math.min.apply(null, ys) - 44;
+    var m = svg.getScreenCTM(); if (!m) { fb.hidden = true; return; }
+    var pt = svg.createSVGPoint(); pt.x = bx; pt.y = by; var s = pt.matrixTransform(m);
+    fb.style.left = s.x + 'px'; fb.style.top = s.y + 'px'; fb.hidden = false;
+    var sig = p.id + '|' + p.type;
+    if (sig !== _fbSig) {
+      _fbSig = sig;
+      var html = '<button data-action="rotate-sel" title="Rotate (])">↻</button>';
+      if (p.type === 'led') html += '<button data-action="flip-sel" title="Flip polarity">⇄</button>';
+      html += '<button data-action="dup" title="Duplicate (Ctrl+D)">⧉</button>';
+      html += '<button data-action="del" title="Delete">✕</button>';
+      fb.innerHTML = html;
+    }
   }
 
   // ---------- events ----------
@@ -642,6 +666,7 @@
 
     if (mod && (k === 'k' || k === 'K')) { openPalette(); e.preventDefault(); return; }
     if (k === 'Escape') {
+      hideCtx();
       if (palOpen) { closePalette(); return; }
       state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return;
     }
@@ -725,6 +750,18 @@
     document.documentElement.setAttribute('data-theme', nxt);
     try { localStorage.setItem('bb.theme', nxt); } catch (_) {}
   }
+  function deleteSelected() {
+    if (!state.sel) return;
+    pushHistory();
+    if (state.sel.kind === 'part') state.parts = state.parts.filter(function (p) { return p.id !== state.sel.id; });
+    else state.wires = state.wires.filter(function (w) { return w.id !== state.sel.id; });
+    state.sel = null; save(); render();
+  }
+  function flipSelected() {
+    if (!state.sel || state.sel.kind !== 'part') return;
+    var p = byId(state.sel.id); if (!p || p.type !== 'led') return;
+    pushHistory(); p.flip = !p.flip; _inspSig = ''; save(); render();
+  }
 
   document.body.addEventListener('click', function (e) {
     var b = e.target.closest('[data-action]'); if (!b) return;
@@ -740,6 +777,9 @@
     else if (act === 'zoomin') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 0.83); return; }
     else if (act === 'zoomout') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 1.2); return; }
     else if (act === 'rotate-sel') { rotateSelected(); return; }
+    else if (act === 'dup') { duplicateSelected(); return; }
+    else if (act === 'del') { deleteSelected(); return; }
+    else if (act === 'flip-sel') { flipSelected(); return; }
     else if (act === 'export') { exportJSON(); return; }
     else if (act === 'import') { document.getElementById('file').click(); return; }
     else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); render(); } return; }
@@ -787,6 +827,44 @@
     else { state.sel = null; state.issueNet = v.net; }
     render();
   });
+
+  // ---------- right-click context menu ----------
+  var ctxItems = [];
+  function hideCtx() { var m = document.getElementById('ctxmenu'); if (m) m.hidden = true; }
+  function showCtx(x, y, items) {
+    var m = document.getElementById('ctxmenu'); if (!m) return;
+    ctxItems = items;
+    m.innerHTML = items.map(function (it, i) { return '<div class="ctx-item" data-ci="' + i + '">' + it.l + '</div>'; }).join('');
+    m.style.left = x + 'px'; m.style.top = y + 'px'; m.hidden = false;
+  }
+  svg.addEventListener('contextmenu', function (e) {
+    e.preventDefault();
+    var partEl = e.target.closest && e.target.closest('[data-part-id]');
+    var wireEl = e.target.closest && e.target.closest('[data-wire-id]');
+    var items;
+    if (partEl) {
+      var id = +partEl.getAttribute('data-part-id'); state.sel = { kind: 'part', id: id }; state.issueNet = null; render();
+      var p = byId(id);
+      items = [{ l: 'Rotate', a: function () { rotateSelectedBy(1); } }];
+      if (p && p.type === 'led') items.push({ l: 'Flip polarity', a: flipSelected });
+      items.push({ l: 'Duplicate', a: duplicateSelected }, { l: 'Delete', a: deleteSelected });
+    } else if (wireEl) {
+      state.sel = { kind: 'wire', id: wireEl.getAttribute('data-wire-id') }; state.issueNet = null; render();
+      items = [{ l: 'Delete wire', a: deleteSelected }];
+    } else {
+      items = [{ l: 'Fit view', a: fitView }, { l: 'Clear board', a: function () { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; save(); render(); } } }];
+    }
+    showCtx(e.clientX, e.clientY, items);
+  });
+  document.getElementById('ctxmenu').addEventListener('click', function (e) {
+    var el = e.target.closest('[data-ci]'); if (!el) return;
+    var it = ctxItems[+el.getAttribute('data-ci')]; hideCtx(); if (it) it.a();
+  });
+  window.addEventListener('pointerdown', function (e) {
+    var m = document.getElementById('ctxmenu');
+    if (m && !m.hidden && !m.contains(e.target)) hideCtx();
+  });
+  window.addEventListener('blur', hideCtx);
 
   // ---------- command palette (Ctrl/Cmd K) ----------
   var paletteCmds = [
