@@ -103,6 +103,8 @@
             <svg viewBox="0 0 28 28" class="bin-ic"><path d="M4 22 Q14 2 24 22" fill="none" stroke="#2a6fd6" stroke-width="3" stroke-linecap="round"/><circle cx="4" cy="22" r="2.4" fill="#2a6fd6"/><circle cx="24" cy="22" r="2.4" fill="#2a6fd6"/></svg>
             <span>Wire</span>
           </button>
+
+          <div class="bin-sub">Basics</div>
           <button class="bin-item tool" data-action="place" data-part="resistor" title="Place a resistor">
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="2" y1="14" x2="9" y2="14" stroke="#bbb" stroke-width="2"/><line x1="19" y1="14" x2="26" y2="14" stroke="#bbb" stroke-width="2"/><rect x="9" y="9" width="10" height="10" rx="5" fill="#cda35f" stroke="#8a6a30"/><rect x="11" y="9" width="1.6" height="10" fill="#b8392b"/><rect x="14" y="9" width="1.6" height="10" fill="#6b4423"/><rect x="16.5" y="9" width="1.6" height="10" fill="#d4af37"/></svg>
             <span>Resistor</span>
@@ -110,6 +112,14 @@
           <button class="bin-item tool" data-action="place" data-part="led" title="Place an LED">
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="11" y1="26" x2="12" y2="16" stroke="#aaa" stroke-width="2"/><line x1="17" y1="26" x2="16" y2="16" stroke="#aaa" stroke-width="2"/><path d="M8 16 L8 11 A6 6 0 0 1 20 11 L20 16 Z" fill="#ef3c3c" stroke="#7c1010"/><ellipse cx="12" cy="8" rx="2" ry="3" fill="#fff" opacity="0.5"/></svg>
             <span>LED</span>
+          </button>
+          <button class="bin-item tool" data-action="place" data-part="rgbled" title="Place an RGB LED (common cathode)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="9" y1="26" x2="9" y2="17" stroke="#aaa" stroke-width="1.4"/><line x1="13" y1="26" x2="13" y2="17" stroke="#aaa" stroke-width="1.4"/><line x1="17" y1="26" x2="17" y2="17" stroke="#aaa" stroke-width="1.4"/><path d="M7 17 L7 12 A7 7 0 0 1 21 12 L21 17 Z" fill="#eef3f7" stroke="#b8c2cc"/><circle cx="11" cy="11" r="2.2" fill="#c0392b"/><circle cx="14" cy="9" r="2.2" fill="#2ecc40"/><circle cx="17" cy="11" r="2.2" fill="#2a6fd6"/></svg>
+            <span>RGB LED</span>
+          </button>
+          <button class="bin-item tool" data-action="place" data-part="diode" title="Place a diode">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="2" y1="14" x2="9" y2="14" stroke="#aaa" stroke-width="1.6"/><line x1="19" y1="14" x2="26" y2="14" stroke="#aaa" stroke-width="1.6"/><rect x="9" y="9" width="10" height="10" rx="1.5" fill="#1a1a1a"/><rect x="16" y="9" width="2.2" height="10" fill="#dcdcdc"/></svg>
+            <span>Diode</span>
           </button>
           <button class="bin-item tool" data-action="place" data-part="button" title="Place a pushbutton (B)">
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="3" y1="9" x2="7" y2="9" stroke="#aaa" stroke-width="1.6"/><line x1="3" y1="19" x2="7" y2="19" stroke="#aaa" stroke-width="1.6"/><line x1="21" y1="9" x2="25" y2="9" stroke="#aaa" stroke-width="1.6"/><line x1="21" y1="19" x2="25" y2="19" stroke="#aaa" stroke-width="1.6"/><rect x="7" y="7" width="14" height="14" rx="3" fill="#1d1d1d"/><circle cx="14" cy="14" r="5" fill="#c0392b" stroke="#7a1414"/></svg>
@@ -119,21 +129,51 @@
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="10" y1="21" x2="11" y2="26" stroke="#aaa" stroke-width="1.6"/><line x1="18" y1="21" x2="17" y2="26" stroke="#aaa" stroke-width="1.6"/><circle cx="14" cy="12" r="9" fill="#181818" stroke="#000"/><circle cx="14" cy="11" r="2.6" fill="#0a0a0a"/></svg>
             <span>Buzzer</span>
           </button>
-          <button class="bin-item tool" data-action="place" data-part="capacitor" title="Place a capacitor">
+
+          <div class="bin-sub">Passives</div>
+          <button class="bin-item tool" data-action="place" data-part="capacitor" title="Place a ceramic capacitor">
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="11" y1="26" x2="11" y2="17" stroke="#aaa" stroke-width="1.6"/><line x1="17" y1="26" x2="17" y2="17" stroke="#aaa" stroke-width="1.6"/><ellipse cx="14" cy="12" rx="9" ry="7" fill="#dba24c" stroke="#9a6e2a"/></svg>
             <span>Capacitor</span>
           </button>
-          <button class="bin-item tool" data-action="place" data-part="diode" title="Place a diode">
-            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="2" y1="14" x2="9" y2="14" stroke="#aaa" stroke-width="1.6"/><line x1="19" y1="14" x2="26" y2="14" stroke="#aaa" stroke-width="1.6"/><rect x="9" y="9" width="10" height="10" rx="1.5" fill="#1a1a1a"/><rect x="16" y="9" width="2.2" height="10" fill="#dcdcdc"/></svg>
-            <span>Diode</span>
+          <button class="bin-item tool" data-action="place" data-part="electrolytic" title="Place an electrolytic capacitor (polarized)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="11" y1="26" x2="11" y2="19" stroke="#aaa" stroke-width="1.4"/><line x1="17" y1="26" x2="17" y2="19" stroke="#aaa" stroke-width="1.4"/><rect x="8" y="5" width="12" height="15" rx="3" fill="#1f3b7a" stroke="#13234a"/><rect x="8" y="6" width="3" height="13" fill="#cfd4e0"/></svg>
+            <span>Electrolytic</span>
           </button>
           <button class="bin-item tool" data-action="place" data-part="potentiometer" title="Place a potentiometer">
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="8" y1="26" x2="8" y2="18" stroke="#aaa" stroke-width="1.6"/><line x1="14" y1="26" x2="14" y2="18" stroke="#aaa" stroke-width="1.6"/><line x1="20" y1="26" x2="20" y2="18" stroke="#aaa" stroke-width="1.6"/><rect x="5" y="6" width="18" height="12" rx="2" fill="#2a4a8a"/><circle cx="14" cy="12" r="5" fill="#cfcfcf" stroke="#8a8a8a"/></svg>
             <span>Pot</span>
           </button>
+
+          <div class="bin-sub">Sensors</div>
+          <button class="bin-item tool" data-action="place" data-part="photoresistor" title="Place a photoresistor (LDR)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="9" y1="26" x2="11" y2="19" stroke="#aaa" stroke-width="1.4"/><line x1="19" y1="26" x2="17" y2="19" stroke="#aaa" stroke-width="1.4"/><circle cx="14" cy="12" r="9" fill="#d8c9a0" stroke="#9a6e2a"/><path d="M8 9 L8 15 L11 15 L11 9 L14 9 L14 15 L17 15 L17 9 L20 9" fill="none" stroke="#3a2f28" stroke-width="1.3"/></svg>
+            <span>Photoresistor</span>
+          </button>
+          <button class="bin-item tool" data-action="place" data-part="thermistor" title="Place a thermistor (NTC)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="10" y1="26" x2="12" y2="18" stroke="#aaa" stroke-width="1.4"/><line x1="18" y1="26" x2="16" y2="18" stroke="#aaa" stroke-width="1.4"/><ellipse cx="14" cy="12" rx="7" ry="9" fill="#141414"/><circle cx="11.5" cy="9" r="1.6" fill="#fff" opacity="0.4"/></svg>
+            <span>Thermistor</span>
+          </button>
+          <button class="bin-item tool" data-action="place" data-part="tiltswitch" title="Place a tilt / ball switch">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="11" y1="26" x2="11" y2="21" stroke="#aaa" stroke-width="1.4"/><line x1="17" y1="26" x2="17" y2="21" stroke="#aaa" stroke-width="1.4"/><rect x="9" y="3" width="10" height="19" rx="5" fill="#1a1a1a"/><circle cx="14" cy="17" r="2.4" fill="#444"/></svg>
+            <span>Tilt switch</span>
+          </button>
+
+          <div class="bin-sub">Active &amp; ICs</div>
+          <button class="bin-item tool" data-action="place" data-part="transistor" title="Place an NPN transistor (TO-92)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><line x1="9" y1="26" x2="9" y2="17" stroke="#9a9a9a" stroke-width="1.4"/><line x1="14" y1="26" x2="14" y2="17" stroke="#9a9a9a" stroke-width="1.4"/><line x1="19" y1="26" x2="19" y2="17" stroke="#9a9a9a" stroke-width="1.4"/><path d="M5 17 A9 9 0 0 1 23 17 Z" fill="#161616"/></svg>
+            <span>Transistor</span>
+          </button>
           <button class="bin-item tool" data-action="place" data-part="ic" title="Place an 8-pin IC">
             <svg viewBox="0 0 28 28" class="bin-ic"><line x1="4" y1="9" x2="7" y2="9" stroke="#9a9a9a" stroke-width="1.6"/><line x1="4" y1="14" x2="7" y2="14" stroke="#9a9a9a" stroke-width="1.6"/><line x1="4" y1="19" x2="7" y2="19" stroke="#9a9a9a" stroke-width="1.6"/><line x1="21" y1="9" x2="24" y2="9" stroke="#9a9a9a" stroke-width="1.6"/><line x1="21" y1="14" x2="24" y2="14" stroke="#9a9a9a" stroke-width="1.6"/><line x1="21" y1="19" x2="24" y2="19" stroke="#9a9a9a" stroke-width="1.6"/><rect x="7" y="6" width="14" height="16" rx="2" fill="#161616"/><path d="M11 6 A3 3 0 0 0 17 6" fill="#0a0a0a"/></svg>
-            <span>IC</span>
+            <span>IC 8-pin</span>
+          </button>
+          <button class="bin-item tool" data-action="place" data-part="shiftregister" title="Place a 74HC595 shift register (16-pin)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><rect x="4" y="8" width="20" height="12" rx="2" fill="#161616"/><path d="M11 8 A3 3 0 0 0 17 8" fill="#0a0a0a"/><line x1="7" y1="20" x2="7" y2="23" stroke="#9a9a9a" stroke-width="1.2"/><line x1="11" y1="20" x2="11" y2="23" stroke="#9a9a9a" stroke-width="1.2"/><line x1="17" y1="20" x2="17" y2="23" stroke="#9a9a9a" stroke-width="1.2"/><line x1="21" y1="20" x2="21" y2="23" stroke="#9a9a9a" stroke-width="1.2"/><line x1="7" y1="5" x2="7" y2="8" stroke="#9a9a9a" stroke-width="1.2"/><line x1="11" y1="5" x2="11" y2="8" stroke="#9a9a9a" stroke-width="1.2"/><line x1="17" y1="5" x2="17" y2="8" stroke="#9a9a9a" stroke-width="1.2"/><line x1="21" y1="5" x2="21" y2="8" stroke="#9a9a9a" stroke-width="1.2"/></svg>
+            <span>74HC595</span>
+          </button>
+          <button class="bin-item tool" data-action="place" data-part="sevenseg" title="Place a 7-segment display (1 digit)">
+            <svg viewBox="0 0 28 28" class="bin-ic"><rect x="7" y="3" width="14" height="22" rx="2" fill="#1c1c1c"/><path d="M11 7 L16 7 M16 7 L16 13 M16 13 L16 19 M11 19 L16 19 M11 13 L11 19 M11 7 L11 13 M11 13 L16 13" stroke="#dd3322" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="19" r="1.2" fill="#dd3322"/></svg>
+            <span>7-Segment</span>
           </button>
         </div>
         <label class="wirecolor">Wire color <input type="color" id="wireColor" value="#2a6fd6"></label>
