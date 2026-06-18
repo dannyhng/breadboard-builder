@@ -1,0 +1,56 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+  background: #23232a;
+  color: #e8e6df;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: #1a1a1f;
+  border-bottom: 1px solid #33333c;
+  flex-wrap: wrap;
+}
+.toolbar h1 { font-size: 15px; margin: 0 6px 0 0; font-weight: 600; }
+
+.group { display: inline-flex; align-items: center; gap: 6px; padding-right: 12px; border-right: 1px solid #33333c; }
+.group:last-of-type { border-right: none; }
+.lbl { font-size: 12px; color: #9a978d; }
+
+.toolbar button {
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid #3c3c46;
+  background: #2c2c34;
+  color: #e8e6df;
+  cursor: pointer;
+}
+.toolbar button:hover { background: #353541; }
+.toolbar button.active { background: #2f6fd6; border-color: #2f6fd6; color: #fff; }
+
+#wireColor { width: 28px; height: 28px; border: none; background: none; padding: 0; cursor: pointer; }
+
+.status { font-size: 12px; color: #9a978d; margin-left: auto; font-family: monospace; }
+
+.hint { margin: 10px 16px 0; font-size: 12px; color: #9a978d; }
+.hint b { color: #cfcabb; font-weight: 600; }
+
+main { padding: 16px; overflow: auto; }
+
+#board {
+  width: 100%;
+  max-width: 1100px;
+  height: auto;
+  display: block;
+  background: #2c2c34;
+  border-radius: 12px;
+  touch-action: none;
+}
+
+body.placing #board { cursor: copy; }

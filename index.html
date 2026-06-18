@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Breadboard Builder</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <h1>Breadboard Builder</h1>
+    <div class="group">
+      <button class="tool active" data-action="select" title="Select / move">Select</button>
+      <button class="tool" data-action="wire" title="Draw wires">Wire</button>
+      <input type="color" id="wireColor" value="#2a6fd6" title="Wire color">
+    </div>
+    <div class="group">
+      <span class="lbl">Place:</span>
+      <button class="tool" data-action="place" data-part="led">LED</button>
+      <button class="tool" data-action="place" data-part="resistor">Resistor</button>
+    </div>
+    <div class="group">
+      <button data-action="export" title="Download layout as JSON">Export</button>
+      <button data-action="import" title="Load a JSON layout">Import</button>
+      <button data-action="clear" title="Clear the board">Clear</button>
+    </div>
+    <span id="status" class="status"></span>
+    <input type="file" id="file" accept="application/json" hidden>
+  </header>
+
+  <p class="hint" id="hint">Tip: click <b>LED</b> or <b>Resistor</b>, then click the board to place it. Use <b>Wire</b> to connect two holes. Click a part or wire and press <b>Delete</b> to remove it. Everything autosaves.</p>
+
+  <main>
+    <svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Virtual breadboard">
+      <defs>
+        <linearGradient id="boardGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fdfcf8"/><stop offset="1" stop-color="#e7e3d2"/>
+        </linearGradient>
+        <linearGradient id="holeGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f2eede"/><stop offset="1" stop-color="#c9c3af"/>
+        </linearGradient>
+        <radialGradient id="ledGrad" cx="0.36" cy="0.30" r="0.85">
+          <stop offset="0" stop-color="#ff9c9c"/><stop offset="0.35" stop-color="#ef3c3c"/>
+          <stop offset="0.78" stop-color="#c81d1d"/><stop offset="1" stop-color="#8c1212"/>
+        </radialGradient>
+        <linearGradient id="metalGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fbfbfb"/><stop offset="0.5" stop-color="#cfcfcf"/><stop offset="1" stop-color="#8f8f8f"/>
+        </linearGradient>
+        <linearGradient id="resGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e3c084"/><stop offset="0.5" stop-color="#cda35f"/><stop offset="1" stop-color="#b0853f"/>
+        </linearGradient>
+        <linearGradient id="pcbGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#13a3aa"/><stop offset="1" stop-color="#067079"/>
+        </linearGradient>
+        <linearGradient id="usbGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#eaeaea"/><stop offset="1" stop-color="#9a9a9a"/>
+        </linearGradient>
+        <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2.5" stdDeviation="2.6" flood-color="#000" flood-opacity="0.32"/>
+        </filter>
+        <filter id="softbig" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#000" flood-opacity="0.38"/>
+        </filter>
+        <symbol id="hole" viewBox="0 0 8 8">
+          <rect x="0" y="0" width="8" height="8" rx="2" fill="url(#holeGrad)" stroke="#b3ad98" stroke-width="0.8"/>
+          <rect x="2.3" y="2.3" width="3.4" height="3.4" rx="0.8" fill="#6c6757"/>
+        </symbol>
+      </defs>
+    </svg>
+  </main>
+
+  <script src="board.js"></script>
+  <script src="parts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
