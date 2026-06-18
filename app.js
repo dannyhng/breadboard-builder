@@ -257,6 +257,32 @@
     var n = 1; while (used[pre + n]) n++;
     return pre + n;
   }
+  // move every part in a multi-selection by the same column/row delta as the grabbed part.
+  // a rigid translation keeps the group internally collision-free, so we only reject if the
+  // new footprint runs off the grid or lands on a part OUTSIDE the group.
+  function dragGroup() {
+    var lead = byId(drag.id); if (!lead) return;
+    var nh = nearestHole(lastPointer.x, lastPointer.y, true); if (!nh) return;
+    var la = holesById[lead.anchor]; if (!la) return;
+    var dcol = nh.col - la.col, drow = ROWS.indexOf(nh.row) - ROWS.indexOf(la.row);
+    if (dcol === 0 && drow === 0) return;
+    var inGroup = {}; drag.ids.forEach(function (gid) { inGroup[gid] = true; });
+    var plan = [], ok = true;
+    for (var i = 0; i < drag.ids.length; i++) {
+      var gp = byId(drag.ids[i]); if (!gp) { ok = false; break; }
+      var ga = holesById[gp.anchor]; if (!ga) { ok = false; break; }
+      var nr = ROWS.indexOf(ga.row) + drow;
+      if (nr < 0 || nr >= ROWS.length) { ok = false; break; }
+      var nah = holeByCR(ga.col + dcol, ROWS[nr]); if (!nah) { ok = false; break; }
+      var legs = deriveLegs(gp.type, nah, gp.rot); if (!legs) { ok = false; break; }
+      var hit = legs.some(function (hid) { return state.parts.some(function (op) { return !inGroup[op.id] && op.legHoles.indexOf(hid) >= 0; }); });
+      if (hit) { ok = false; break; }
+      plan.push({ p: gp, anchor: nah.id, legs: legs });
+    }
+    if (!ok) return;
+    plan.forEach(function (x) { x.p.anchor = x.anchor; x.p.legHoles = x.legs; });
+    drag.moved = true; render();
+  }
   function wirePath(x1, y1, x2, y2) {
     var mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.min(70, Math.abs(x2 - x1) * 0.3 + 22);
     return 'M ' + x1 + ' ' + y1 + ' Q ' + mx + ' ' + my + ' ' + x2 + ' ' + y2;
@@ -276,6 +302,7 @@
     // zoom-adaptive detail: hide tiny labels when they would render below ~4px
     var rect = svg.getBoundingClientRect();
     if (rect.height) document.body.classList.toggle('lod', (rect.height / view.h) < 0.62);
+    updateFloatbar(); // keep the selection toolbar pinned to its part through pan / zoom / pinch
   }
   function clampW(w) { return Math.max(dims.width * 0.22, Math.min(dims.width * 3.5, w)); }
   function zoomAt(bx, by, factor) {
@@ -599,6 +626,7 @@
     lastPointer = toBoard(e);
     if (state.placing || state.wireDraft) { render(); return; }
     if (drag) {
+      if (drag.group) { dragGroup(); return; }
       var p = byId(drag.id);
       if (p) {
         var legs = validLegs(p.type, nearestHole(lastPointer.x, lastPointer.y, true), p.rot, p.id);
@@ -617,7 +645,8 @@
 
   svg.addEventListener('pointerdown', function (e) {
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; drag = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
+    var _cm = document.getElementById('ctxmenu'); if (_cm && !_cm.hidden) { hideCtx(); delete pointers[e.pointerId]; return; } // a press while the menu is open just dismisses it
+    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; drag = null; marquee = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
     if (spaceDown || e.button === 1) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; document.body.classList.add('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); return; }
     if (e.button === 2) return; // right button -> let the context menu handle it, no select/drag/marquee
     lastPointer = toBoard(e);
@@ -631,9 +660,15 @@
         if (mi >= 0) state.multi.splice(mi, 1); else state.multi.push(id);
         state.sel = null; render(); return;
       }
+      if (state.multi.length > 1 && state.multi.indexOf(id) >= 0) {
+        // grabbing a part that is part of the multi-selection drags the whole group together
+        drag = { group: true, ids: state.multi.slice(), id: id, moved: false, before: JSON.stringify(snapshot()), pointerId: e.pointerId };
+        try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+        return;
+      }
       state.multi = [];
       state.sel = { kind: 'part', id: id };
-      if (byId(id)) drag = { id: id, moved: false, before: JSON.stringify(snapshot()) };
+      if (byId(id)) drag = { id: id, moved: false, before: JSON.stringify(snapshot()), pointerId: e.pointerId };
       try { svg.setPointerCapture(e.pointerId); } catch (_) {}
       render(); return;
     }
@@ -756,6 +791,7 @@
   function setActiveAction(a) { setActiveEl(bin ? bin.querySelector('[data-action="' + a + '"]') : null); }
   function chooseTool(t) {
     state.tool = t; state.placing = null; state.wireDraft = null; state.multi = [];
+    state.hoverNode = null; state.hoverHoleId = null;
     document.body.classList.remove('placing');
     document.body.classList.toggle('wiring', t === 'wire');
     setActiveAction(t); render();
@@ -763,6 +799,7 @@
   function choosePlace(type) {
     if (!PARTS[type]) return;
     state.tool = 'select'; state.wireDraft = null; state.placing = { type: type, rot: 0 }; state.multi = [];
+    state.hoverNode = null; state.hoverHoleId = null;
     document.body.classList.add('placing'); document.body.classList.remove('wiring');
     setActiveEl(bin ? bin.querySelector('[data-part="' + type + '"]') : null); render();
   }
@@ -802,6 +839,7 @@
     try { localStorage.setItem('bb.theme', nxt); } catch (_) {}
   }
   function deleteSelected() {
+    if (drag) { try { svg.releasePointerCapture(drag.pointerId); } catch (_) {} drag = null; } // never keep a drag pointed at a deleted part
     if (state.multi && state.multi.length) {
       pushHistory();
       var ids = state.multi.slice();
@@ -902,6 +940,8 @@
   }
   svg.addEventListener('contextmenu', function (e) {
     e.preventDefault();
+    marquee = null; pan = null; document.body.classList.remove('panning'); // abort any in-flight gesture before the menu opens
+    if (drag) { try { svg.releasePointerCapture(drag.pointerId); } catch (_) {} drag = null; }
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
     var wireEl = e.target.closest && e.target.closest('[data-wire-id]');
     var items;
@@ -927,7 +967,7 @@
     var m = document.getElementById('ctxmenu');
     if (m && !m.hidden && !m.contains(e.target)) hideCtx();
   });
-  window.addEventListener('blur', hideCtx);
+  window.addEventListener('blur', function () { hideCtx(); spaceDown = false; document.body.classList.remove('panning'); }); // a missed keyup must not leave pan mode stuck on
 
   // ---------- command palette (Ctrl/Cmd K) ----------
   var paletteCmds = [
@@ -997,7 +1037,11 @@
     state.parts = (o.parts || []).map(normalizePart).filter(validPart);
     state.parts.forEach(function (p) { if (!p.label) p.label = nextLabel(p.type); });
     state.wires = (o.wires || []).filter(function (w) { return connXY(w.from) && connXY(w.to); });
-    state.nextId = o.nextId || (state.parts.length + state.wires.length + 10);
+    // float the id counter above every loaded id so freshly placed parts can never collide
+    var maxId = 0;
+    state.parts.forEach(function (p) { if (typeof p.id === 'number' && p.id > maxId) maxId = p.id; });
+    state.wires.forEach(function (w) { var n = +String(w.id).replace(/^w/, ''); if (n > maxId) maxId = n; });
+    state.nextId = Math.max(o.nextId || 0, maxId + 1);
   }
 
   // ---------- undo / redo (snapshot history; state is tiny) ----------
@@ -1007,7 +1051,7 @@
     updateUndoButtons();
   }
   function applySnap(snap) {
-    adopt(snap); state.sel = null; state.placing = null; state.wireDraft = null;
+    adopt(snap); state.sel = null; state.multi = []; marquee = null; state.placing = null; state.wireDraft = null;
     document.body.classList.remove('placing'); save(); render(); updateUndoButtons();
   }
   function undo() { if (!history.length) return; future.push(JSON.stringify(snapshot())); applySnap(JSON.parse(history.pop())); }
