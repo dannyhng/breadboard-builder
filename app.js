@@ -37,6 +37,7 @@
 
   var boardLayer = E('g'), ardLayer = E('g'), wireLayer = E('g'), partLayer = E('g');
   var overlay = E('g', { 'pointer-events': 'none' });
+  var handleLayer = E('g'); // wire-endpoint grab handles, kept above parts so an endpoint on a part leg is still grabbable
 
   var holesById = {};
   board.holes.forEach(function (h) { holesById[h.id] = h; });
@@ -197,7 +198,7 @@
   var state = { parts: [], wires: [], sel: null, multi: [], tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1, sim: true };
   var wireColor = '#2a6fd6';
   var lastPointer = { x: dims.width / 2, y: 80 };
-  var drag = null, marquee = null;
+  var drag = null, marquee = null, wireDrag = null;
   var nets = null;
   var history = [], future = [];
   var view = { x: 0, y: 0, w: dims.width, h: dims.height + ARD_H };
@@ -520,7 +521,7 @@
   // ---------- render dynamic layers ----------
   function render() {
     refreshNets();
-    clear(wireLayer); clear(partLayer); clear(overlay);
+    clear(wireLayer); clear(partLayer); clear(overlay); clear(handleLayer);
 
     // active electrical net to highlight: hover wins, else selection, else a clicked issue
     var sn = selectionNetRoot();
@@ -546,12 +547,22 @@
 
     state.wires.forEach(function (w) {
       var a = connXY(w.from), b = connXY(w.to); if (!a || !b) return;
+      if (wireDrag && wireDrag.id === w.id) { // follow the grabbed end live
+        var dp = wireDrag.target ? connXY(wireDrag.target) : { x: lastPointer.x, y: lastPointer.y };
+        if (dp) { if (wireDrag.end === 'from') a = dp; else b = dp; }
+      }
       var d = wirePath(a.x, a.y, b.x, b.y);
       E('path', { d: d, fill: 'none', stroke: '#00000040', 'stroke-width': 6, 'stroke-linecap': 'round' }, wireLayer);
       E('path', { d: d, fill: 'none', stroke: w.color, 'stroke-width': 4, 'stroke-linecap': 'round' }, wireLayer);
       E('path', { d: d, fill: 'none', stroke: '#000', 'stroke-width': 13, opacity: 0, 'data-wire-id': w.id, style: 'cursor:pointer' }, wireLayer);
-      E('circle', { cx: a.x, cy: a.y, r: 3.2, fill: w.color }, wireLayer);
-      E('circle', { cx: b.x, cy: b.y, r: 3.2, fill: w.color }, wireLayer);
+      E('circle', { cx: a.x, cy: a.y, r: 3.6, fill: w.color, stroke: '#fff', 'stroke-width': 0.9 }, wireLayer);
+      E('circle', { cx: b.x, cy: b.y, r: 3.6, fill: w.color, stroke: '#fff', 'stroke-width': 0.9 }, wireLayer);
+      E('circle', { cx: a.x, cy: a.y, r: 7, fill: '#000', opacity: 0, 'data-wire-end': w.id + '|from', style: 'cursor:grab' }, handleLayer);
+      E('circle', { cx: b.x, cy: b.y, r: 7, fill: '#000', opacity: 0, 'data-wire-end': w.id + '|to', style: 'cursor:grab' }, handleLayer);
+      if (wireDrag && wireDrag.id === w.id && wireDrag.target) {
+        var tp = connXY(wireDrag.target);
+        if (tp) E('circle', { cx: tp.x, cy: tp.y, r: 6.5, fill: 'none', stroke: '#27c93f', 'stroke-width': 2 }, handleLayer);
+      }
       if (state.sel && state.sel.kind === 'wire' && state.sel.id === w.id)
         E('path', { d: d, fill: 'none', stroke: '#3aa0ff', 'stroke-width': 2, 'stroke-dasharray': '4 3' }, wireLayer);
     });
@@ -719,6 +730,11 @@
     if (pinch) { doPinch(); return; }
     if (pan) { doPan(e); return; }
     lastPointer = toBoard(e);
+    if (wireDrag) {
+      var wc = nearestConn(lastPointer.x, lastPointer.y);
+      wireDrag.target = (wc.conn && wc.dist < 16) ? wc.conn.id : null;
+      render(); return;
+    }
     if (state.placing || state.wireDraft) { render(); return; }
     if (drag) {
       if (drag.group) { dragGroup(); return; }
@@ -748,6 +764,14 @@
     state.hoverNode = null; state.hoverHoleId = null; // a gesture is starting; drop any stale hover ring
     if (state.placing || state.tool === 'wire') return;
     state.issueNet = null;
+    var endEl = e.target.closest && e.target.closest('[data-wire-end]');
+    if (endEl) { // grab a wire endpoint to re-plug it
+      var we = endEl.getAttribute('data-wire-end').split('|');
+      wireDrag = { id: we[0], end: we[1], target: null, before: JSON.stringify(snapshot()) };
+      state.sel = { kind: 'wire', id: we[0] }; state.multi = [];
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+      render(); return;
+    }
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
     if (partEl) {
       var id = +partEl.getAttribute('data-part-id');
@@ -785,6 +809,17 @@
   window.addEventListener('pointerup', function (e) {
     delete pointers[e.pointerId];
     if (pinch && Object.keys(pointers).length < 2) pinch = null;
+    if (wireDrag) { // commit the re-plugged endpoint to a valid, non-duplicate connector
+      var w = wireById(wireDrag.id);
+      if (w && wireDrag.target) {
+        var other = wireDrag.end === 'from' ? w.to : w.from;
+        if (wireDrag.target !== other && w[wireDrag.end] !== wireDrag.target) {
+          var dup = state.wires.some(function (x) { return x.id !== w.id && ((x.from === wireDrag.target && x.to === other) || (x.from === other && x.to === wireDrag.target)); });
+          if (!dup) { try { history.push(wireDrag.before); if (history.length > 120) history.shift(); future.length = 0; } catch (_) {} w[wireDrag.end] = wireDrag.target; updateUndoButtons(); save(); }
+        }
+      }
+      wireDrag = null; render(); return;
+    }
     if (pan) { var panClick = pan.fromEmpty && !pan.moved; pan = null; document.body.classList.remove('panning'); if (panClick) { state.sel = null; state.multi = []; render(); } }
     if (marquee) {
       if (marquee.moved) {
@@ -801,7 +836,7 @@
   });
   window.addEventListener('pointercancel', function (e) {
     delete pointers[e.pointerId];
-    pinch = null; finishDrag(); marquee = null;
+    pinch = null; finishDrag(); marquee = null; wireDrag = null;
     if (pan) { pan = null; document.body.classList.remove('panning'); }
   });
   svg.addEventListener('wheel', function (e) {
@@ -853,7 +888,7 @@
 
     if (mod && (k === 'k' || k === 'K')) { openPalette(); e.preventDefault(); return; }
     if (k === 'Escape') {
-      hideCtx(); marquee = null;
+      hideCtx(); marquee = null; wireDrag = null;
       if (palOpen) { closePalette(); return; }
       state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); render(); return;
     }
@@ -1078,7 +1113,7 @@
     var m = document.getElementById('ctxmenu');
     if (m && !m.hidden && !m.contains(e.target)) hideCtx();
   });
-  window.addEventListener('blur', function () { hideCtx(); spaceDown = false; marquee = null; pan = null; document.body.classList.remove('panning'); }); // a missed keyup / lost focus must not strand pan or a marquee
+  window.addEventListener('blur', function () { hideCtx(); spaceDown = false; marquee = null; pan = null; wireDrag = null; document.body.classList.remove('panning'); }); // a missed keyup / lost focus must not strand a gesture
 
   // ---------- command palette (Ctrl/Cmd K) ----------
   var paletteCmds = [
