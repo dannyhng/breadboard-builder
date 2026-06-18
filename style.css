@@ -176,6 +176,7 @@ body.wiring #board { cursor: crosshair; }
 }
 .bottombar button:hover { background: var(--surface-3); }
 .bottombar button:disabled { opacity: 0.4; cursor: default; }
+.bottombar button.on { border-color: var(--accent); color: var(--accent); background: var(--accent-muted); box-shadow: 0 0 0 1px var(--accent) inset; }
 .bottombar button:disabled:hover { background: var(--surface-1); }
 .bhint { color: var(--text-3); font-size: 11px; }
 .status { color: var(--text-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }

@@ -194,7 +194,7 @@
   })();
 
   // ---------- state ----------
-  var state = { parts: [], wires: [], sel: null, multi: [], tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1 };
+  var state = { parts: [], wires: [], sel: null, multi: [], tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1, sim: true };
   var wireColor = '#2a6fd6';
   var lastPointer = { x: dims.width / 2, y: 80 };
   var drag = null, marquee = null;
@@ -443,7 +443,59 @@
       if (ardPins[w.to]) bumpNet(find(w.to));
     });
 
-    nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, violations: violations, netCount: netCount };
+    // ---- L2 sim: simplified DC power flow that lights the LEDs ----
+    var sim = null;
+    if (state.sim) {
+      var srcRoots = {}, gndRoots = {};
+      function markSrc(n) { srcRoots[find(n)] = true; }
+      function markGnd(n) { gndRoots[find(n)] = true; }
+      markSrc('rail-top-plus'); markSrc('rail-bot-plus');
+      ['ARD-5V', 'ARD-3V3', 'ARD-VIN', 'ARD-IOREF'].forEach(function (p) { if (ardPins[p]) markSrc(p); });
+      for (var dpin = 0; dpin <= 13; dpin++) { if (ardPins['ARD-D' + dpin]) markSrc('ARD-D' + dpin); } // assume digital outputs are driven HIGH
+      markGnd('rail-top-minus'); markGnd('rail-bot-minus');
+      ['ARD-GND', 'ARD-GND2', 'ARD-GND3'].forEach(function (p) { if (ardPins[p]) markGnd(p); });
+
+      var biEdges = [], dlist = [];
+      state.parts.forEach(function (p) {
+        var hs = p.legHoles.map(function (id) { return holesById[id]; });
+        if (hs.some(function (h) { return !h; })) return;
+        if (p.type === 'resistor' || p.type === 'potentiometer') {
+          for (var i = 0; i < hs.length; i++) for (var j = i + 1; j < hs.length; j++) biEdges.push([find(hs[i].node), find(hs[j].node)]);
+        } else if (p.type === 'led' || p.type === 'diode') {
+          var an = p.flip ? hs[1] : hs[0], ca = p.flip ? hs[0] : hs[1];
+          dlist.push({ id: p.id, anode: find(an.node), cathode: find(ca.node) });
+        }
+      });
+      function flood(seed, fwd) {
+        var reach = {}; for (var r in seed) reach[r] = true;
+        var changed = true;
+        while (changed) {
+          changed = false;
+          for (var i = 0; i < biEdges.length; i++) { var e = biEdges[i]; if (reach[e[0]] && !reach[e[1]]) { reach[e[1]] = true; changed = true; } if (reach[e[1]] && !reach[e[0]]) { reach[e[0]] = true; changed = true; } }
+          for (var k = 0; k < dlist.length; k++) { var d = dlist[k]; if (fwd) { if (reach[d.anode] && !reach[d.cathode]) { reach[d.cathode] = true; changed = true; } } else { if (reach[d.cathode] && !reach[d.anode]) { reach[d.anode] = true; changed = true; } } }
+        }
+        return reach;
+      }
+      var srcReach = flood(srcRoots, true), gndReach = flood(gndRoots, false);
+      var lit = {}, rgbLit = {}, active = {};
+      dlist.forEach(function (d) { if (srcReach[d.anode] && gndReach[d.cathode]) lit[d.id] = true; });
+      state.parts.forEach(function (p) {
+        var hs = p.legHoles.map(function (id) { return holesById[id]; });
+        if (hs.some(function (h) { return !h; })) return;
+        if (p.type === 'rgbled') {
+          var order = p.flip ? ['B', 'G', '-', 'R'] : ['R', '-', 'G', 'B'];
+          var com = find(hs[order.indexOf('-')].node), ch = {};
+          ['R', 'G', 'B'].forEach(function (c) { var a = find(hs[order.indexOf(c)].node); ch[c] = !!(srcReach[a] && gndReach[com]); });
+          rgbLit[p.id] = ch;
+        } else if (p.type === 'buzzer') {
+          var a = find(hs[0].node), b = find(hs[1].node);
+          if ((srcReach[a] && gndReach[b]) || (srcReach[b] && gndReach[a])) active[p.id] = true;
+        }
+      });
+      sim = { on: true, lit: lit, rgbLit: rgbLit, active: active };
+    }
+
+    nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, violations: violations, netCount: netCount, sim: sim };
   }
   function rootOfNode(nodeId) {
     if (!nets) return null;
@@ -496,7 +548,9 @@
     });
 
     state.parts.forEach(function (p) {
-      var g = drawPartInto(partLayer, p.type, p.legHoles, p, { 'data-part-id': p.id, style: 'cursor:grab' });
+      var dopts = p, s = nets.sim;
+      if (s) dopts = Object.assign({}, p, { _sim: true, _lit: !!s.lit[p.id], _rgb: s.rgbLit[p.id] || null, _active: !!s.active[p.id] });
+      var g = drawPartInto(partLayer, p.type, p.legHoles, dopts, { 'data-part-id': p.id, style: 'cursor:grab' });
       var isSel = (state.sel && state.sel.kind === 'part' && state.sel.id === p.id) || (state.multi.indexOf(p.id) >= 0);
       if (g && isSel) {
         try {
@@ -890,6 +944,7 @@
     else if (act === 'undo') { undo(); return; }
     else if (act === 'redo') { redo(); return; }
     else if (act === 'fit') { fitView(); return; }
+    else if (act === 'power') { state.sim = !state.sim; syncPowerBtn(); render(); return; }
     else if (act === 'zoomin') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 0.83); return; }
     else if (act === 'zoomout') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 1.2); return; }
     else if (act === 'rotate-sel') { rotateSelected(); return; }
@@ -1133,8 +1188,14 @@
     save();
   }
 
+  function syncPowerBtn() {
+    var pb = document.getElementById('powerbtn'); if (pb) pb.classList.toggle('on', state.sim);
+    document.body.classList.toggle('sim-on', state.sim);
+  }
+
   if (!loadSaved()) seedDemo();
   setActiveAction('select');
+  syncPowerBtn();
   applyView();
   render();
   updateUndoButtons();

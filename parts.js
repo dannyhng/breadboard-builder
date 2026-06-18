@@ -38,6 +38,8 @@
     blue:   { grad: 'ledc-blue',   stroke: '#15296b' },
     white:  { grad: 'ledc-white',  stroke: '#9a9a9a' }
   };
+  // glow colour used when an LED is lit in the power simulation
+  var LED_GLOW = { red: '#ff5a4a', yellow: '#ffe25a', green: '#62ff6e', blue: '#5a9bff', white: '#ffffff' };
 
   // small helper: a text node (mk returns the element so we can set textContent)
   function label(mk, x, y, s, size, fill) {
@@ -54,7 +56,9 @@
     var color = (opts && opts.color) || 'red';
     var meta = LED_COLORS[color] || LED_COLORS.red;
     var flip = !!(opts && opts.flip);
+    var sim = !!(opts && opts._sim), lit = !!(opts && opts._lit);
     var mx = len / 2, baseY = -24, domeCy = baseY - 12;
+    if (sim && lit) mk('circle', { cx: mx, cy: domeCy, r: 25, fill: LED_GLOW[color] || '#ffffff', opacity: 0.45, filter: SOFT });
     mk('line', { x1: 0, y1: 0, x2: mx - 7, y2: baseY, stroke: METAL, 'stroke-width': 2.6, 'stroke-linecap': 'round' });
     mk('line', { x1: len, y1: 0, x2: mx + 7, y2: baseY, stroke: METAL, 'stroke-width': 2.6, 'stroke-linecap': 'round' });
     mk('rect', { x: mx - 15, y: baseY - 6, width: 30, height: 10, rx: 3, fill: '#ececec', stroke: '#bdbdbd', 'stroke-width': 0.8 });
@@ -62,8 +66,10 @@
       ' A 15 15 0 0 1 ' + (mx + 15) + ' ' + domeCy + ' L ' + (mx + 15) + ' ' + (baseY - 4) + ' Z';
     mk('path', { d: dome, fill: 'url(#' + meta.grad + ')', stroke: meta.stroke, 'stroke-width': 0.8, filter: SOFT });
     mk('circle', { cx: mx, cy: domeCy, r: 15, fill: 'url(#' + meta.grad + ')', stroke: meta.stroke, 'stroke-width': 0.8 });
+    if (sim && lit) mk('circle', { cx: mx, cy: domeCy, r: 13, fill: '#ffffff', opacity: 0.4 });
     mk('ellipse', { cx: mx - 5, cy: domeCy - 6, rx: 5, ry: 7.5, fill: '#ffffff', opacity: 0.5,
       transform: 'rotate(-18 ' + (mx - 5) + ' ' + (domeCy - 6) + ')' });
+    if (sim && !lit) mk('circle', { cx: mx, cy: domeCy, r: 15.5, fill: '#0b0e14', opacity: 0.42 }); // dim when not powered
     mk('rect', { x: (!flip) ? (mx + 11) : (mx - 15), y: baseY - 6, width: 4, height: 10, fill: '#222', opacity: 0.85 });
   }
 
@@ -122,6 +128,10 @@
     mk('circle', { cx: mx, cy: cy - 1, r: 3.5, fill: '#0a0a0a' });
     mk('line', { x1: 7, y1: -9, x2: 7, y2: -3, stroke: '#ddd', 'stroke-width': 1.4 });
     mk('line', { x1: 4, y1: -6, x2: 10, y2: -6, stroke: '#ddd', 'stroke-width': 1.4 });
+    if (opts && opts._sim && opts._active) { // sounding: emit a couple of sound arcs
+      mk('path', { d: 'M ' + (mx + r + 1) + ' ' + (cy - 5) + ' Q ' + (mx + r + 6) + ' ' + cy + ' ' + (mx + r + 1) + ' ' + (cy + 5), fill: 'none', stroke: '#27c93f', 'stroke-width': 1.4 });
+      mk('path', { d: 'M ' + (mx + r + 5) + ' ' + (cy - 8) + ' Q ' + (mx + r + 12) + ' ' + cy + ' ' + (mx + r + 5) + ' ' + (cy + 8), fill: 'none', stroke: '#27c93f', 'stroke-width': 1.2, opacity: 0.7 });
+    }
   }
 
   // photoresistor / LDR: pale disc with a serpentine track.
@@ -192,18 +202,22 @@
   // RGB LED (common cathode): one clear 4-leg dome with three colour pips.
   function drawRgbLed(mk, coords, opts) {
     var flip = !!(opts && opts.flip);
+    var sim = !!(opts && opts._sim), rgb = (opts && opts._rgb) || null;
     var b = bbox(coords), cx = (b.minX + b.maxX) / 2, baseY = b.minY;
     var r = Math.min((b.maxX - b.minX) * 0.42, 22), flangeY = baseY - 18, domeCy = flangeY - 10;
     coords.forEach(function (c) { mk('line', { x1: c.x, y1: c.y, x2: c.x, y2: flangeY, stroke: METAL, 'stroke-width': 2.2, 'stroke-linecap': 'round' }); });
-    mk('circle', { cx: cx, cy: domeCy, r: r + 4, fill: '#9ad7ff', opacity: 0.18, filter: SOFT });
+    var anyLit = sim && rgb && (rgb.R || rgb.G || rgb.B);
+    var glow = !anyLit ? '#9ad7ff' : (rgb.R && rgb.G && rgb.B) ? '#ffffff' : (rgb.R && rgb.G) ? '#ffe25a' : (rgb.R && rgb.B) ? '#ff7ad9' : (rgb.G && rgb.B) ? '#5ad9e0' : rgb.R ? '#ff5a4a' : rgb.G ? '#62ff6e' : '#5a9bff';
+    mk('circle', { cx: cx, cy: domeCy, r: r + (anyLit ? 9 : 4), fill: glow, opacity: anyLit ? 0.5 : 0.18, filter: SOFT });
     mk('rect', { x: cx - r, y: flangeY - 5, width: r * 2, height: 8, rx: 2, fill: '#e8e8e8', stroke: '#bdbdbd', 'stroke-width': 0.8 });
     var dome = 'M ' + (cx - r) + ' ' + (flangeY - 3) + ' L ' + (cx - r) + ' ' + domeCy +
       ' A ' + r + ' ' + r + ' 0 0 1 ' + (cx + r) + ' ' + domeCy + ' L ' + (cx + r) + ' ' + (flangeY - 3) + ' Z';
     mk('path', { d: dome, fill: '#eef3f7', stroke: '#b8c2cc', 'stroke-width': 0.8, opacity: 0.85, filter: SOFT });
     mk('circle', { cx: cx, cy: domeCy, r: r, fill: '#eef3f7', opacity: 0.45 });
-    mk('circle', { cx: cx - 6, cy: domeCy + 1, r: 3, fill: '#c0392b', opacity: 0.85 });
-    mk('circle', { cx: cx, cy: domeCy - 4, r: 3, fill: '#2ecc40', opacity: 0.85 });
-    mk('circle', { cx: cx + 6, cy: domeCy + 1, r: 3, fill: '#2a6fd6', opacity: 0.85 });
+    function pop(ch) { return !sim ? 0.85 : (rgb && rgb[ch] ? 1 : 0.25); }
+    mk('circle', { cx: cx - 6, cy: domeCy + 1, r: 3, fill: '#c0392b', opacity: pop('R') });
+    mk('circle', { cx: cx, cy: domeCy - 4, r: 3, fill: '#2ecc40', opacity: pop('G') });
+    mk('circle', { cx: cx + 6, cy: domeCy + 1, r: 3, fill: '#2a6fd6', opacity: pop('B') });
     mk('ellipse', { cx: cx - 4, cy: domeCy - 6, rx: 3, ry: 5, fill: '#ffffff', opacity: 0.5 });
     var names = flip ? ['B', 'G', '-', 'R'] : ['R', '-', 'G', 'B'];
     coords.forEach(function (c, i) { if (i < 4) label(mk, c.x, c.y + 12, names[i], 6, '#8a8a8a'); });
