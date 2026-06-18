@@ -185,6 +185,14 @@
     txt(g, ax + 150, ay + H - 12, 'www.arduino.cc', { 'text-anchor': 'middle', 'font-size': 6, fill: '#fff', opacity: 0.5 });
   })();
 
+  // mark the small static labels so LOD can hide them when zoomed far out
+  (function tagLodLabels() {
+    [boardLayer, ardLayer].forEach(function (layer) {
+      var ts = layer.querySelectorAll('text');
+      for (var i = 0; i < ts.length; i++) { if (parseFloat(ts[i].getAttribute('font-size') || '12') <= 10) ts[i].setAttribute('class', 'lod-hide'); }
+    });
+  })();
+
   // ---------- state ----------
   var state = { parts: [], wires: [], sel: null, multi: [], tool: 'select', placing: null, wireDraft: null, hoverNode: null, hoverHoleId: null, issueNet: null, nextId: 1 };
   var wireColor = '#2a6fd6';
@@ -265,8 +273,11 @@
   function applyView() {
     svg.setAttribute('viewBox', view.x + ' ' + view.y + ' ' + view.w + ' ' + view.h);
     var z = document.getElementById('zoomlevel'); if (z) z.textContent = Math.round(dims.width / view.w * 100) + '%';
+    // zoom-adaptive detail: hide tiny labels when they would render below ~4px
+    var rect = svg.getBoundingClientRect();
+    if (rect.height) document.body.classList.toggle('lod', (rect.height / view.h) < 0.62);
   }
-  function clampW(w) { return Math.max(dims.width * 0.22, Math.min(dims.width * 1.7, w)); }
+  function clampW(w) { return Math.max(dims.width * 0.22, Math.min(dims.width * 3.5, w)); }
   function zoomAt(bx, by, factor) {
     var nw = clampW(view.w * factor), k = nw / view.w, nh = view.h * k;
     var fx = (bx - view.x) / view.w, fy = (by - view.y) / view.h;
@@ -458,7 +469,7 @@
       if (p.label && g) {
         try {
           var lb = g.getBBox();
-          var tt = E('text', { x: lb.x + lb.width / 2, y: lb.y - 5, 'text-anchor': 'middle', 'font-size': 10, 'font-family': 'ui-monospace, Menlo, monospace', fill: '#6c7682', 'pointer-events': 'none' }, partLayer);
+          var tt = E('text', { x: lb.x + lb.width / 2, y: lb.y - 5, 'text-anchor': 'middle', 'font-size': 10, 'font-family': 'ui-monospace, Menlo, monospace', fill: '#6c7682', 'pointer-events': 'none', 'class': 'lod-hide' }, partLayer);
           tt.textContent = p.label;
         } catch (_) {}
       }
@@ -492,6 +503,11 @@
     renderIssues();
     renderInspector();
     updateFloatbar();
+    updateEmptyState();
+  }
+  function updateEmptyState() {
+    var es = document.getElementById('emptystate'); if (!es) return;
+    es.hidden = !(state.parts.length === 0 && state.wires.length === 0);
   }
 
   function updateStatus() {
@@ -714,6 +730,11 @@
     if (k === 'r' || k === 'R') { choosePlace('resistor'); return; }
     if (k === 'l' || k === 'L') { choosePlace('led'); return; }
     if (k === 'b' || k === 'B') { choosePlace('button'); return; }
+    if (k === '1') { choosePlace('resistor'); return; }
+    if (k === '2') { choosePlace('led'); return; }
+    if (k === '3') { choosePlace('button'); return; }
+    if (k === '4') { choosePlace('buzzer'); return; }
+    if (k === '5') { chooseTool('wire'); return; }
     if (k === ']' || k === '.') { rotateSelectedBy(1); return; }
     if (k === '[' || k === ',') { rotateSelectedBy(3); return; }
     if (k === 'Delete' || k === 'Backspace') { deleteSelected(); e.preventDefault(); }

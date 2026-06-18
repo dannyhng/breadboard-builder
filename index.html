@@ -83,6 +83,12 @@
           </symbol>
         </defs>
       </svg>
+      <div class="emptystate" id="emptystate" hidden>
+        <div>
+          <div class="es-title">Your board is empty</div>
+          <div class="es-hint">Pick a part from the bin on the right, or press <b>Ctrl&#8202;+&#8202;K</b> for commands.</div>
+        </div>
+      </div>
     </main>
 
     <aside class="dock">
@@ -134,7 +140,7 @@
     <button data-action="undo" disabled>Undo</button>
     <button data-action="redo" disabled>Redo</button>
     <button data-action="rotate-sel" title="Rotate selected (R)">Rotate</button>
-    <span class="bhint">V select &middot; W wire &middot; R/L place &middot; [ ] rotate &middot; Ctrl+D duplicate &middot; Ctrl+K commands</span>
+    <span class="bhint">V/W tools &middot; 1-5 or R/L/B place &middot; [ ] rotate &middot; Ctrl+D dup &middot; Ctrl+K commands</span>
     <span class="grow"></span>
     <span class="ercbadge ok" id="ercbadge">No issues</span>
     <span class="status" id="status"></span>
