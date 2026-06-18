@@ -54,3 +54,11 @@ main { padding: 16px; overflow: auto; }
 }
 
 body.placing #board { cursor: copy; }
+
+.checks {
+  margin: 6px 16px 0;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.checks.ok { color: #5fb87a; }
+.checks.warn { color: #e0a93f; }

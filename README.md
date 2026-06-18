@@ -26,6 +26,9 @@ matters).
 - Draw colored **jumper wires** between any two holes (or to the Arduino's pins).
 - A stylized **Arduino UNO** below the board with wire-able 5V / GND / D13 / D12
   pins, so a full "blink an LED" circuit is buildable end to end.
+- **Hover any hole** to light up every hole electrically connected to it (the
+  equipotential highlight), and live **checks** flag a power-rail short or a
+  component shorted across one strip.
 - **Select** a part or wire and press **Delete** to remove it.
 - **Autosave** to the browser, plus **Export** / **Import** of the layout as
   JSON, and **Clear**.
@@ -80,9 +83,9 @@ and drop-shadow budget. See the technique notes in `DESIGN.md`.
    IC, jumper-less power.
 2. Full-size 63-column board as a toggle (current default is a 30-column board
    that fits a screen).
-3. The wiring checker: union-find over the electrical nodes to flag shorts,
-   floating pins, and "is D13 actually connected to the LED?". (This also catches
-   a vertical part accidentally placed with both legs in the same half.)
+3. Deepen the wiring checker. The equipotential highlight + short detection have
+   shipped (union-find over the electrical nodes). Next: floating-pin detection
+   and "is D13 actually connected to the LED?" reachability.
 4. Draggable Arduino, and a small parts library.
 5. PNG export for lab reports.
 
