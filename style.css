@@ -65,3 +65,41 @@ body.panning #board { cursor: grabbing; }
 }
 .checks.ok { color: #5fb87a; }
 .checks.warn { color: #e0a93f; }
+
+.inspector {
+  position: fixed;
+  right: 18px;
+  top: 132px;
+  z-index: 5;
+  width: 200px;
+  background: #1f1f26;
+  border: 1px solid #3a3a44;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.inspector .insp-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.inspector label { display: block; font-size: 11px; color: #9a978d; margin: 8px 0 3px; }
+.inspector select {
+  width: 100%;
+  font-size: 13px;
+  padding: 5px 6px;
+  border-radius: 6px;
+  background: #2c2c34;
+  color: #e8e6df;
+  border: 1px solid #3c3c46;
+}
+.inspector button {
+  margin-top: 8px;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #3c3c46;
+  background: #2c2c34;
+  color: #e8e6df;
+  cursor: pointer;
+}
+.inspector button:hover { background: #353541; }
+.inspector .insp-row { display: flex; gap: 6px; }
+.inspector .insp-row button { flex: 1; }
+.inspector .insp-note { font-size: 10px; color: #7d7a70; margin-top: 8px; line-height: 1.4; }

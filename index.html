@@ -36,6 +36,8 @@
   <p class="hint" id="hint">Tip: click <b>LED</b> or <b>Resistor</b>, then click the board to place it. Press <b>R</b> to rotate. Use <b>Wire</b> to connect two holes. <b>Hover any hole</b> to light up everything it's electrically connected to. <b>Scroll</b> to zoom, hold <b>Space</b> (or pinch on a touch screen) to pan, <b>0</b> or Fit to reset. Click a part or wire and press <b>Delete</b> to remove it. Everything autosaves.</p>
   <div id="checks" class="checks">Checks: no electrical issues</div>
 
+  <div id="inspector" class="inspector" hidden></div>
+
   <main>
     <svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Virtual breadboard">
       <defs>
@@ -48,6 +50,26 @@
         <radialGradient id="ledGrad" cx="0.36" cy="0.30" r="0.85">
           <stop offset="0" stop-color="#ff9c9c"/><stop offset="0.35" stop-color="#ef3c3c"/>
           <stop offset="0.78" stop-color="#c81d1d"/><stop offset="1" stop-color="#8c1212"/>
+        </radialGradient>
+        <radialGradient id="ledc-red" cx="0.36" cy="0.30" r="0.85">
+          <stop offset="0" stop-color="#ff9c9c"/><stop offset="0.35" stop-color="#ef3c3c"/>
+          <stop offset="0.78" stop-color="#c81d1d"/><stop offset="1" stop-color="#8c1212"/>
+        </radialGradient>
+        <radialGradient id="ledc-yellow" cx="0.36" cy="0.30" r="0.85">
+          <stop offset="0" stop-color="#fff7b0"/><stop offset="0.35" stop-color="#f2d83a"/>
+          <stop offset="0.78" stop-color="#d8b81d"/><stop offset="1" stop-color="#8a6f10"/>
+        </radialGradient>
+        <radialGradient id="ledc-green" cx="0.36" cy="0.30" r="0.85">
+          <stop offset="0" stop-color="#bfffbf"/><stop offset="0.35" stop-color="#46d846"/>
+          <stop offset="0.78" stop-color="#1faa1f"/><stop offset="1" stop-color="#0f5a0f"/>
+        </radialGradient>
+        <radialGradient id="ledc-blue" cx="0.36" cy="0.30" r="0.85">
+          <stop offset="0" stop-color="#bcd2ff"/><stop offset="0.35" stop-color="#4d7bf0"/>
+          <stop offset="0.78" stop-color="#2450c8"/><stop offset="1" stop-color="#15296b"/>
+        </radialGradient>
+        <radialGradient id="ledc-white" cx="0.36" cy="0.30" r="0.85">
+          <stop offset="0" stop-color="#ffffff"/><stop offset="0.4" stop-color="#f0f0f0"/>
+          <stop offset="0.8" stop-color="#d4d4d4"/><stop offset="1" stop-color="#a8a8a8"/>
         </radialGradient>
         <linearGradient id="metalGrad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#fbfbfb"/><stop offset="0.5" stop-color="#cfcfcf"/><stop offset="1" stop-color="#8f8f8f"/>

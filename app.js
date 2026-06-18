@@ -220,10 +220,8 @@
     for (var id in board.nodes) find(id);
     for (var pid in ardPins) find(pid);
     state.wires.forEach(function (w) { uni(nodeOfConn(w.from), nodeOfConn(w.to)); });
-    state.parts.forEach(function (p) {
-      var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
-      if (h0 && h1) uni(h0.node, h1.node);
-    });
+    // NOTE: components do NOT union nodes. A resistor's two sides are different
+    // potentials, so the equipotential highlight correctly stops at a component.
     var holeNet = {}, pinNet = {}, nodeNet = {};
     for (var id2 in board.nodes) nodeNet[id2] = find(id2);
     board.holes.forEach(function (h) { holeNet[h.id] = find(h.node); });
@@ -237,6 +235,26 @@
       var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
       if (h0 && h1 && h0.node === h1.node) issues.push(PARTS[p.type].label + ' is shorted (both legs on the same strip).');
     });
+
+    // LED polarity / missing-resistor checks. Supply = + rails and 5V; ground =
+    // - rails and GND. Because components do not union nets, an LED whose legs
+    // land directly on supply and ground has no resistor in series.
+    var supRoots = ['rail-top-plus', 'rail-bot-plus', 'ARD-5V'].map(find);
+    var gndRoots = ['rail-top-minus', 'rail-bot-minus', 'ARD-GND'].map(find);
+    function inSet(set, r) { return set.indexOf(r) >= 0; }
+    var ledNoRes = false, ledRev = false;
+    state.parts.forEach(function (p) {
+      if (p.type !== 'led') return;
+      var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
+      if (!h0 || !h1 || h0.node === h1.node) return;
+      var ra = find(p.flip ? h1.node : h0.node), rc = find(p.flip ? h0.node : h1.node);
+      if ((inSet(supRoots, ra) && inSet(gndRoots, rc)) || (inSet(gndRoots, ra) && inSet(supRoots, rc))) {
+        ledNoRes = true;
+        if (inSet(gndRoots, ra) && inSet(supRoots, rc)) ledRev = true;
+      }
+    });
+    if (ledNoRes) issues.push('LED is directly across power with no current-limiting resistor.');
+    if (ledRev) issues.push('LED looks backwards (its cathode is toward +).');
 
     nets = { nodeNet: nodeNet, holeNet: holeNet, pinNet: pinNet, find: find, issues: issues };
   }
@@ -317,6 +335,7 @@
     }
     updateStatus();
     updateChecks();
+    renderInspector();
   }
 
   function updateStatus() {
@@ -331,6 +350,30 @@
     if (!ck || !nets) return;
     if (!nets.issues.length) { ck.textContent = 'Checks: no electrical issues'; ck.className = 'checks ok'; }
     else { ck.textContent = 'Checks: ' + nets.issues.join('   •   '); ck.className = 'checks warn'; }
+  }
+
+  var _inspSig = '';
+  function renderInspector() {
+    var el = document.getElementById('inspector'); if (!el) return;
+    var p = (state.sel && state.sel.kind === 'part') ? byId(state.sel.id) : null;
+    var sig = p ? (p.id + '|' + p.type + '|' + (p.value || '') + '|' + (p.color || '') + '|' + p.flip + '|' + p.rot) : '';
+    if (sig === _inspSig) return;
+    _inspSig = sig;
+    if (!p) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    var h = '<div class="insp-title">' + PARTS[p.type].label + '</div>';
+    if (p.type === 'resistor') {
+      h += '<label>Resistance</label><select data-insp="value">';
+      window.RES_VALUES.forEach(function (o) { h += '<option value="' + o.v + '"' + (o.v === (p.value || '220') ? ' selected' : '') + '>' + o.v + ' Ω</option>'; });
+      h += '</select>';
+    } else if (p.type === 'led') {
+      h += '<label>Color</label><select data-insp="color">';
+      Object.keys(window.LED_COLORS).forEach(function (c) { h += '<option value="' + c + '"' + (c === (p.color || 'red') ? ' selected' : '') + '>' + c + '</option>'; });
+      h += '</select><button data-insp="flip">Flip polarity</button>';
+      h += '<div class="insp-note">The marked side is the cathode (minus).</div>';
+    }
+    h += '<div class="insp-row"><button data-insp="rotate">Rotate</button><button data-insp="delete">Delete</button></div>';
+    el.innerHTML = h;
   }
 
   // ---------- events ----------
@@ -405,7 +448,9 @@
       var legs = validLegs(state.placing.type, nearestHole(pt.x, pt.y, true), state.placing.rot);
       if (legs) {
         pushHistory();
-        state.parts.push({ id: state.nextId++, type: state.placing.type, anchor: legs[0], rot: state.placing.rot, legHoles: legs });
+        var np = { id: state.nextId++, type: state.placing.type, anchor: legs[0], rot: state.placing.rot, legHoles: legs };
+        var dd = PARTS[state.placing.type].defaults; if (dd) for (var dk in dd) np[dk] = dd[dk];
+        state.parts.push(np);
         state.placing = null; document.body.classList.remove('placing'); setActiveAction('select'); state.tool = 'select';
         save(); render();
       }
@@ -484,9 +529,34 @@
     r.readAsText(f); e.target.value = '';
   });
 
+  var inspEl = document.getElementById('inspector');
+  function inspPart() { return (state.sel && state.sel.kind === 'part') ? byId(state.sel.id) : null; }
+  inspEl.addEventListener('change', function (e) {
+    var el = e.target.closest('[data-insp]'); if (!el) return;
+    var p = inspPart(); if (!p) return;
+    var k = el.getAttribute('data-insp');
+    if (k === 'value') { pushHistory(); p.value = el.value; save(); _inspSig = ''; render(); }
+    else if (k === 'color') { pushHistory(); p.color = el.value; save(); _inspSig = ''; render(); }
+  });
+  inspEl.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-insp]'); if (!el) return;
+    var p = inspPart(); if (!p) return;
+    var k = el.getAttribute('data-insp');
+    if (k === 'flip') { pushHistory(); p.flip = !p.flip; save(); _inspSig = ''; render(); }
+    else if (k === 'rotate') {
+      var nr = (p.rot + 1) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
+      if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); _inspSig = ''; render(); }
+    } else if (k === 'delete') { pushHistory(); state.parts = state.parts.filter(function (x) { return x.id !== p.id; }); state.sel = null; save(); render(); }
+  });
+
   // ---------- persistence ----------
   var KEY = 'breadboard.layout.v1';
-  function normalizePart(p) { if (p.rot == null) p.rot = 0; if (p.anchor == null && p.legHoles) p.anchor = p.legHoles[0]; return p; }
+  function normalizePart(p) {
+    if (p.rot == null) p.rot = 0;
+    if (p.anchor == null && p.legHoles) p.anchor = p.legHoles[0];
+    var d = PARTS[p.type] && PARTS[p.type].defaults; if (d) for (var k in d) if (p[k] == null) p[k] = d[k];
+    return p;
+  }
   function validPart(p) { return p.legHoles && PARTS[p.type] && holesById[p.legHoles[0]] && holesById[p.legHoles[1]]; }
   function snapshot() { return { version: 1, parts: state.parts, wires: state.wires, nextId: state.nextId }; }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (_) {} }
@@ -538,7 +608,9 @@
     function part(type, c, r) {
       var anchor = holeByCR(c, r); if (!anchor) return null;
       var legs = deriveLegs(type, anchor, 0); if (!legs) return null;
-      state.parts.push({ id: state.nextId++, type: type, anchor: legs[0], rot: 0, legHoles: legs });
+      var p = { id: state.nextId++, type: type, anchor: legs[0], rot: 0, legHoles: legs };
+      var sd = PARTS[type].defaults; if (sd) for (var sk in sd) p[sk] = sd[sk];
+      state.parts.push(p);
     }
     part('resistor', 12, 'b');
     part('led', 19, 'b');

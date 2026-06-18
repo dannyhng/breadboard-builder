@@ -21,8 +21,8 @@ does not apply to a web breadboard tool.
 | Place + rotate parts | Yes (LED, resistor) | Yes (huge library) | Yes (broad library) |
 | Jumper wires | Click hole to hole | Bendable wires + Bezier curves | Yes |
 | Equipotential highlight (see the net) | Yes (shipped) | Yes (press-and-hold) | Partial |
-| Wiring checks | Short + shorted-part | Ratsnest "still to connect" | Live electrical sim |
-| Edit part values (Inspector) | No | Yes (resistance, LED color, live) | Yes |
+| Wiring checks | Short, shorted part, reversed LED, no resistor | Ratsnest "still to connect" | Live electrical sim |
+| Edit part values (Inspector) | Yes (resistor Ω, LED color + polarity) | Yes (resistance, LED color, live) | Yes |
 | Undo/redo, multi-select, copy/paste | No | Yes | Yes |
 | Zoom / pan | No | Yes | Yes |
 | Parts library + search | 2 parts | Large bins + search | Large catalogs |
@@ -55,13 +55,14 @@ underserves and the simulators treat as secondary.
    re-render per mousemove). NEXT.
 
 **P1 - depth:**
-4. Inspector panel: select a part, edit its value. Resistor ohms (with correct
-   color bands), LED color + polarity (mark the cathode). This is also what lets
-   the checker flag a backwards LED or a missing current-limiting resistor.
+4. Inspector panel. SHIPPED. Select a part, edit its value: resistor ohms (with
+   correct color bands), LED color + polarity (a marked cathode).
 5. More parts on an N-leg architecture: push button, capacitor, potentiometer,
    diode, transistor, a DIP/IC, a battery/supply. (Current code hardcodes 2 legs.)
-6. Deeper wiring checker: floating pins, redundant-wire warning, "is D13 actually
-   connected to the LED", reversed-LED and no-resistor warnings.
+   NEXT.
+6. Deeper wiring checker. Reversed-LED and no-current-limiting-resistor warnings
+   SHIPPED (the equipotential model now correctly stops at components). Next:
+   floating pins, redundant-wire warning, "is D13 actually connected to the LED".
 
 **P2 - product:**
 7. Share-by-URL (the state is tiny: base64 it into the link) + PNG export + named

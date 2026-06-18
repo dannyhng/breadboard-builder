@@ -26,9 +26,14 @@ matters).
 - Draw colored **jumper wires** between any two holes (or to the Arduino's pins).
 - A stylized **Arduino UNO** below the board with wire-able 5V / GND / D13 / D12
   pins, so a full "blink an LED" circuit is buildable end to end.
+- **Select a part to edit it** in the Inspector: a resistor's value (with the
+  correct color bands) or an LED's color and polarity.
 - **Hover any hole** to light up every hole electrically connected to it (the
-  equipotential highlight), and live **checks** flag a power-rail short or a
-  component shorted across one strip.
+  equipotential highlight; it correctly stops at a component). Live **checks**
+  flag a power-rail short, a shorted component, a backwards LED, and an LED with
+  no current-limiting resistor.
+- **Zoom and pan**: scroll to zoom, hold Space or middle-drag to pan, pinch on a
+  touch screen, Fit to reset. **Undo/redo** with Ctrl+Z / Ctrl+Shift+Z.
 - **Select** a part or wire and press **Delete** to remove it.
 - **Autosave** to the browser, plus **Export** / **Import** of the layout as
   JSON, and **Clear**.
