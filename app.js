@@ -619,6 +619,7 @@
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; drag = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
     if (spaceDown || e.button === 1) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; document.body.classList.add('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); return; }
+    if (e.button === 2) return; // right button -> let the context menu handle it, no select/drag/marquee
     lastPointer = toBoard(e);
     if (state.placing || state.tool === 'wire') return;
     state.issueNet = null;
@@ -851,9 +852,15 @@
 
   var inspEl = document.getElementById('inspector');
   function inspPart() { return (state.sel && state.sel.kind === 'part') ? byId(state.sel.id) : null; }
+  var _labelEditing = false;
+  inspEl.addEventListener('focusin', function (e) {
+    var el = e.target.closest && e.target.closest('[data-insp]');
+    if (el && el.getAttribute('data-insp') === 'label') _labelEditing = false;
+  });
   inspEl.addEventListener('input', function (e) {
     var el = e.target.closest('[data-insp]'); if (!el || el.getAttribute('data-insp') !== 'label') return;
     var p = inspPart(); if (!p) return;
+    if (!_labelEditing) { pushHistory(); _labelEditing = true; } // one undo step per edit session, capturing the pre-edit name
     p.label = el.value; save(); render();
   });
   inspEl.addEventListener('change', function (e) {
