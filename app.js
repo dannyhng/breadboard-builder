@@ -283,6 +283,11 @@
       if (nr < 0 || nr >= ROWS.length) { ok = false; break; }
       var nah = holeByCR(ga.col + dcol, ROWS[nr]); if (!nah) { ok = false; break; }
       var legs = deriveLegs(gp.type, nah, gp.rot); if (!legs) { ok = false; break; }
+      if (PARTS[gp.type].straddle) { // a straddle part must keep its legs on distinct strips (stay across the ravine)
+        var strips = {};
+        for (var si = 0; si < legs.length; si++) { var sh = holesById[legs[si]]; if (sh) { if (strips[sh.node]) { ok = false; break; } strips[sh.node] = true; } }
+        if (!ok) break;
+      }
       var hit = legs.some(function (hid) { return state.parts.some(function (op) { return !inGroup[op.id] && op.legHoles.indexOf(hid) >= 0; }); });
       if (hit) { ok = false; break; }
       plan.push({ p: gp, anchor: nah.id, legs: legs });
@@ -408,11 +413,13 @@
       if (h0 && h1 && h0.node === h1.node) viol('err', 'shorted_part', find(h0.node), (p.label || PARTS[p.type].label) + ' is shorted (both legs on the same strip).', 'Move one leg to another column.', [p.id]);
     });
 
-    // shorted IC / display pins: a straddle part with two legs landing on the same strip
+    // shorted IC / display pins: a straddle part with two legs on the same breadboard
+    // STRIP (h.node), i.e. not actually straddling the ravine. Use the raw strip, not
+    // find() -- two pins legitimately tied together by an external wire are not a short.
     state.parts.forEach(function (p) {
       if (!PARTS[p.type].straddle) return;
       var seen = {}, bad = false;
-      p.legHoles.forEach(function (hid) { var h = holesById[hid]; if (!h) return; var r = find(h.node); if (seen[r]) bad = true; seen[r] = true; });
+      p.legHoles.forEach(function (hid) { var h = holesById[hid]; if (!h) return; if (seen[h.node]) bad = true; seen[h.node] = true; });
       if (bad) viol('err', 'shorted_pins', null, (p.label || PARTS[p.type].label) + ' has pins shorted together.', 'Place it straddling the center ravine so its two rows sit on opposite strips.', [p.id]);
     });
 
