@@ -20,7 +20,7 @@
   var dims = board.dims, L = board.layout, P = dims.pitch;
 
   var svg = document.getElementById('board');
-  var ARD_H = 132;
+  var ARD_H = 332;
   svg.setAttribute('viewBox', '0 0 ' + dims.width + ' ' + (dims.height + ARD_H));
 
   function E(name, attrs, parent) {
@@ -76,28 +76,113 @@
   // ---------- static render: stylized Arduino, with wire-able pins ----------
   var ardPins = {};
   (function drawArduino() {
-    var ax = 120, ay = dims.height + 6, g = ardLayer;
-    E('rect', { x: ax, y: ay, width: 360, height: 120, rx: 10, fill: 'url(#pcbGrad)', stroke: '#045158', 'stroke-width': 1.4, filter: 'url(#softbig)' }, g);
-    E('rect', { x: ax + 8, y: ay + 8, width: 344, height: 104, rx: 6, fill: 'none', stroke: '#fff', 'stroke-width': 0.7, opacity: 0.3 }, g);
-    var hx = ax + 70, hy = ay + 12, n = 16;
-    E('rect', { x: hx - 8, y: hy, width: n * 13 + 6, height: 16, rx: 3, fill: '#1c1c1c' }, g);
-    var labels = { 0: '5V', 1: 'GND', 5: 'D13', 6: 'D12' };
-    for (var i = 0; i < n; i++) {
-      var px = hx + i * 13;
-      E('rect', { x: px - 4, y: hy + 3, width: 9, height: 9, rx: 1.5, fill: '#3a3a3a', stroke: '#0a0a0a', 'stroke-width': 0.6 }, g);
-      if (labels[i]) {
-        ardPins['ARD-' + labels[i]] = { x: px, y: hy + 2, label: labels[i] };
-        txt(g, px, hy - 3, labels[i], { 'text-anchor': 'middle', 'font-size': 7, fill: '#cde' });
-      }
+    var ax = 100, ay = dims.height + 16, W = 470, H = 304, g = ardLayer;
+    var DIGITAL = [
+      { l: 'AREF', id: 'ARD-AREF' }, { l: 'GND', id: 'ARD-GND' }, { l: '13', id: 'ARD-D13' }, { l: '12', id: 'ARD-D12' },
+      { l: '~11', id: 'ARD-D11' }, { l: '~10', id: 'ARD-D10' }, { l: '~9', id: 'ARD-D9' }, { l: '8', id: 'ARD-D8' },
+      { l: '7', id: 'ARD-D7' }, { l: '~6', id: 'ARD-D6' }, { l: '~5', id: 'ARD-D5' }, { l: '4', id: 'ARD-D4' },
+      { l: '~3', id: 'ARD-D3' }, { l: '2', id: 'ARD-D2' }, { l: '1', id: 'ARD-D1' }, { l: '0', id: 'ARD-D0' }
+    ];
+    var POWER = [
+      { l: 'IOREF', id: 'ARD-IOREF' }, { l: 'RST', id: 'ARD-RESET' }, { l: '3V3', id: 'ARD-3V3' }, { l: '5V', id: 'ARD-5V' },
+      { l: 'GND', id: 'ARD-GND2' }, { l: 'GND', id: 'ARD-GND3' }, { l: 'VIN', id: 'ARD-VIN' }
+    ];
+    var ANALOG = [
+      { l: 'A0', id: 'ARD-A0' }, { l: 'A1', id: 'ARD-A1' }, { l: 'A2', id: 'ARD-A2' },
+      { l: 'A3', id: 'ARD-A3' }, { l: 'A4', id: 'ARD-A4' }, { l: 'A5', id: 'ARD-A5' }
+    ];
+
+    E('rect', { x: ax, y: ay, width: W, height: H, rx: 12, fill: 'url(#pcbGrad)', stroke: '#044f56', 'stroke-width': 1.5, filter: 'url(#softbig)' }, g);
+    E('rect', { x: ax + 9, y: ay + 9, width: W - 18, height: H - 18, rx: 7, fill: 'none', stroke: '#ffffff', 'stroke-width': 0.8, opacity: 0.25 }, g);
+
+    [[ax + 24, ay + 24], [ax + 24, ay + H - 24], [ax + W - 26, ay + 52], [ax + W - 26, ay + H - 52]].forEach(function (p) {
+      E('circle', { cx: p[0], cy: p[1], r: 6.5, fill: '#dcdcdc', stroke: '#8a8a8a', 'stroke-width': 1 }, g);
+      E('circle', { cx: p[0], cy: p[1], r: 2.6, fill: '#1c1c1c' }, g);
+    });
+
+    E('rect', { x: ax - 24, y: ay + 44, width: 36, height: 52, rx: 3, fill: 'url(#usbGrad)', stroke: '#7c7c7c', 'stroke-width': 1 }, g);
+    E('rect', { x: ax - 19, y: ay + 50, width: 27, height: 40, rx: 2, fill: '#cdcdcd', stroke: '#9a9a9a', 'stroke-width': 0.6 }, g);
+
+    E('rect', { x: ax - 16, y: ay + H - 96, width: 36, height: 48, rx: 7, fill: '#0c0c0c', stroke: '#333', 'stroke-width': 1 }, g);
+    E('ellipse', { cx: ax + 2, cy: ay + H - 72, rx: 9, ry: 10, fill: '#262626', stroke: '#555', 'stroke-width': 1.2 }, g);
+
+    E('rect', { x: ax + 44, y: ay + H - 132, width: 28, height: 36, rx: 2, fill: '#171717' }, g);
+    E('rect', { x: ax + 48, y: ay + H - 136, width: 20, height: 8, rx: 1, fill: '#3a3a3a' }, g);
+
+    [[ax + 96, ay + H - 92], [ax + 130, ay + H - 92]].forEach(function (p) {
+      E('circle', { cx: p[0], cy: p[1], r: 16, fill: '#1b2a4a', stroke: '#0d1530', 'stroke-width': 1.3 }, g);
+      E('circle', { cx: p[0], cy: p[1], r: 9, fill: '#243a64' }, g);
+      E('line', { x1: p[0] - 6, y1: p[1], x2: p[0] + 6, y2: p[1], stroke: '#9aa6c0', 'stroke-width': 1 }, g);
+    });
+
+    E('rect', { x: ax + 22, y: ay + 26, width: 34, height: 30, rx: 3, fill: '#101010' }, g);
+    E('circle', { cx: ax + 39, cy: ay + 41, r: 9, fill: '#c0392b', stroke: '#7a1414', 'stroke-width': 1.3 }, g);
+    txt(g, ax + 39, ay + 64, 'RESET', { 'text-anchor': 'middle', 'font-size': 7, fill: '#dff' });
+
+    function icsp(x, y, label) {
+      E('rect', { x: x - 3, y: y - 3, width: 24, height: 21, rx: 2, fill: '#caa15a', opacity: 0.22 }, g);
+      for (var r = 0; r < 2; r++) for (var c = 0; c < 3; c++) E('rect', { x: x + c * 9, y: y + r * 9, width: 6, height: 6, rx: 1, fill: '#caa15a', stroke: '#7a5e2e', 'stroke-width': 0.5 }, g);
+      if (label) txt(g, x + 9, y + 28, label, { 'text-anchor': 'middle', 'font-size': 6, fill: '#dff' });
     }
-    E('rect', { x: ax - 14, y: ay + 26, width: 28, height: 36, rx: 3, fill: 'url(#usbGrad)', stroke: '#888' }, g);
-    E('rect', { x: ax - 12, y: ay + 74, width: 26, height: 28, rx: 5, fill: '#101010', stroke: '#333' }, g);
-    E('rect', { x: ax + 150, y: ay + 54, width: 110, height: 30, rx: 3, fill: '#161616' }, g);
-    E('rect', { x: ax + 60, y: ay + 58, width: 18, height: 12, rx: 2, fill: '#0d0d0d' }, g);
-    E('rect', { x: ax + 86, y: ay + 58, width: 12, height: 12, rx: 2, fill: '#c9a23a' }, g);
-    E('rect', { x: ax + 40, y: ay + 58, width: 7, height: 5, rx: 1, fill: '#37d04a' }, g);
-    txt(g, ax + 150, ay + 100, 'ARDUINO', { fill: '#fff', opacity: 0.85, 'font-size': 14, 'font-weight': 'bold', 'font-family': 'system-ui' });
-    txt(g, ax + 150, ay + 112, 'UNO', { fill: '#fff', opacity: 0.7, 'font-size': 9, 'font-family': 'system-ui' });
+    icsp(ax + 74, ay + 30, 'ICSP2');
+    icsp(ax + W - 56, ay + 150, 'ICSP');
+
+    var icx = ax + 188, icy = ay + 184, icw = 168, ich = 42;
+    E('rect', { x: icx, y: icy, width: icw, height: ich, rx: 2, fill: '#141414', stroke: '#000', 'stroke-width': 0.8 }, g);
+    E('path', { d: 'M ' + (icx + icw / 2 - 8) + ' ' + icy + ' A 8 8 0 0 0 ' + (icx + icw / 2 + 8) + ' ' + icy + ' Z', fill: '#0a0a0a' }, g);
+    for (var i = 0; i < 14; i++) {
+      var lx = icx + 9 + i * ((icw - 18) / 13);
+      E('rect', { x: lx - 1.5, y: icy - 4, width: 3, height: 4, fill: '#9a9a9a' }, g);
+      E('rect', { x: lx - 1.5, y: icy + ich, width: 3, height: 4, fill: '#9a9a9a' }, g);
+    }
+    txt(g, icx + icw / 2, icy + ich / 2 + 3, 'ATMEGA328', { 'text-anchor': 'middle', 'font-size': 7, fill: '#7a7a7a' });
+
+    E('rect', { x: icx + icw + 8, y: icy + 8, width: 30, height: 16, rx: 8, fill: '#c8c8c8', stroke: '#999', 'stroke-width': 1 }, g);
+    txt(g, icx + icw + 23, icy + 33, '16MHz', { 'text-anchor': 'middle', 'font-size': 5.5, fill: '#cfe' });
+
+    (function logo() {
+      var cx = ax + 196, cy = ay + 112;
+      E('circle', { cx: cx - 12, cy: cy, r: 12, fill: 'none', stroke: '#fff', 'stroke-width': 4, opacity: 0.9 }, g);
+      E('circle', { cx: cx + 12, cy: cy, r: 12, fill: 'none', stroke: '#fff', 'stroke-width': 4, opacity: 0.9 }, g);
+      txt(g, cx - 12, cy + 4, '–', { 'text-anchor': 'middle', 'font-size': 13, fill: '#fff', 'font-weight': 'bold' });
+      txt(g, cx + 12, cy + 5, '+', { 'text-anchor': 'middle', 'font-size': 12, fill: '#fff', 'font-weight': 'bold' });
+      txt(g, cx + 36, cy + 6, 'ARDUINO', { 'text-anchor': 'start', 'font-size': 17, 'font-weight': 'bold', 'font-family': 'system-ui', fill: '#fff' });
+      E('rect', { x: cx + 152, y: cy - 15, width: 60, height: 30, rx: 15, fill: 'none', stroke: '#fff', 'stroke-width': 2, opacity: 0.85 }, g);
+      txt(g, cx + 182, cy + 7, 'UNO', { 'text-anchor': 'middle', 'font-size': 19, 'font-weight': 'bold', 'font-family': 'system-ui', fill: '#fff' });
+    })();
+
+    function ledDot(x, y, color, label, labelLeft) {
+      E('rect', { x: x, y: y, width: 10, height: 6, rx: 1, fill: color, stroke: '#0005', 'stroke-width': 0.4 }, g);
+      if (label) txt(g, labelLeft ? x - 3 : x + 13, y + 5.5, label, { 'text-anchor': labelLeft ? 'end' : 'start', 'font-size': 6, fill: '#dff' });
+    }
+    ledDot(ax + 132, ay + 86, '#f2d83a', 'L', true);
+    ledDot(ax + 120, ay + 132, '#f2d83a', 'TX', true);
+    ledDot(ax + 120, ay + 146, '#f2d83a', 'RX', true);
+    ledDot(ax + W - 96, ay + 120, '#37d04a', 'ON');
+
+    function headerRow(sx, y, pins, labelBelow) {
+      var pitch = 13.5, n = pins.length;
+      E('rect', { x: sx - 7, y: y - 7, width: (n - 1) * pitch + 14, height: 14, rx: 3, fill: '#191919' }, g);
+      pins.forEach(function (pin, i) {
+        var px = sx + i * pitch;
+        E('rect', { x: px - 4.5, y: y - 4.5, width: 9, height: 9, rx: 1.5, fill: '#3a3a3a', stroke: '#0a0a0a', 'stroke-width': 0.6 }, g);
+        E('rect', { x: px - 1.8, y: y - 1.8, width: 3.6, height: 3.6, rx: 0.6, fill: '#6a6a6a' }, g);
+        if (pin.id) ardPins[pin.id] = { x: px, y: y, label: pin.l };
+        if (pin.l) {
+          var ly = labelBelow ? y + 8 : y - 8;
+          var t = txt(g, px, ly, pin.l, { 'text-anchor': 'start', 'font-size': 6, fill: '#e6f2f3' });
+          t.setAttribute('transform', 'rotate(-90 ' + px + ' ' + ly + ')');
+        }
+      });
+    }
+    headerRow(ax + 180, ay + 20, DIGITAL, true);
+    headerRow(ax + 180, ay + H - 20, POWER, false);
+    headerRow(ax + 312, ay + H - 20, ANALOG, false);
+
+    txt(g, ax + 280, ay + 46, 'DIGITAL (PWM~)', { 'text-anchor': 'middle', 'font-size': 8, fill: '#fff', opacity: 0.85 });
+    txt(g, ax + 220, ay + H - 44, 'POWER', { 'text-anchor': 'middle', 'font-size': 7, fill: '#fff', opacity: 0.8 });
+    txt(g, ax + 346, ay + H - 44, 'ANALOG IN', { 'text-anchor': 'middle', 'font-size': 7, fill: '#fff', opacity: 0.8 });
+    txt(g, ax + 150, ay + H - 12, 'www.arduino.cc', { 'text-anchor': 'middle', 'font-size': 6, fill: '#fff', opacity: 0.5 });
   })();
 
   // ---------- state ----------
@@ -163,7 +248,10 @@
   function toBoard(evt) { return screenToBoard(evt.clientX, evt.clientY); }
 
   // ---------- zoom / pan (viewBox; toBoard reads the live CTM so snapping stays correct) ----------
-  function applyView() { svg.setAttribute('viewBox', view.x + ' ' + view.y + ' ' + view.w + ' ' + view.h); }
+  function applyView() {
+    svg.setAttribute('viewBox', view.x + ' ' + view.y + ' ' + view.w + ' ' + view.h);
+    var z = document.getElementById('zoomlevel'); if (z) z.textContent = Math.round(dims.width / view.w * 100) + '%';
+  }
   function clampW(w) { return Math.max(dims.width * 0.22, Math.min(dims.width * 1.7, w)); }
   function zoomAt(bx, by, factor) {
     var nw = clampW(view.w * factor), k = nw / view.w, nh = view.h * k;
@@ -239,8 +327,8 @@
     // LED polarity / missing-resistor checks. Supply = + rails and 5V; ground =
     // - rails and GND. Because components do not union nets, an LED whose legs
     // land directly on supply and ground has no resistor in series.
-    var supRoots = ['rail-top-plus', 'rail-bot-plus', 'ARD-5V'].map(find);
-    var gndRoots = ['rail-top-minus', 'rail-bot-minus', 'ARD-GND'].map(find);
+    var supRoots = ['rail-top-plus', 'rail-bot-plus', 'ARD-5V', 'ARD-3V3', 'ARD-VIN'].map(find);
+    var gndRoots = ['rail-top-minus', 'rail-bot-minus', 'ARD-GND', 'ARD-GND2', 'ARD-GND3'].map(find);
     function inSet(set, r) { return set.indexOf(r) >= 0; }
     var ledNoRes = false, ledRev = false;
     state.parts.forEach(function (p) {
@@ -348,8 +436,8 @@
   function updateChecks() {
     var ck = document.getElementById('checks');
     if (!ck || !nets) return;
-    if (!nets.issues.length) { ck.textContent = 'Checks: no electrical issues'; ck.className = 'checks ok'; }
-    else { ck.textContent = 'Checks: ' + nets.issues.join('   •   '); ck.className = 'checks warn'; }
+    if (!nets.issues.length) { ck.textContent = 'No electrical issues'; ck.className = 'checks ok'; }
+    else { ck.innerHTML = nets.issues.map(function (s) { return '<div>' + s + '</div>'; }).join(''); ck.className = 'checks warn'; }
   }
 
   var _inspSig = '';
@@ -359,8 +447,7 @@
     var sig = p ? (p.id + '|' + p.type + '|' + (p.value || '') + '|' + (p.color || '') + '|' + p.flip + '|' + p.rot) : '';
     if (sig === _inspSig) return;
     _inspSig = sig;
-    if (!p) { el.hidden = true; el.innerHTML = ''; return; }
-    el.hidden = false;
+    if (!p) { el.innerHTML = '<div class="insp-empty">Select a part to edit its value.</div>'; return; }
     var h = '<div class="insp-title">' + PARTS[p.type].label + '</div>';
     if (p.type === 'resistor') {
       h += '<label>Resistance</label><select data-insp="value">';
@@ -501,13 +588,19 @@
     }
   });
 
-  // ---------- toolbar ----------
-  var toolbar = document.querySelector('.toolbar');
-  function clearActive() { toolbar.querySelectorAll('button.tool').forEach(function (b) { b.classList.remove('active'); }); }
-  function setActiveEl(b) { clearActive(); if (b) b.classList.add('active'); }
-  function setActiveAction(a) { setActiveEl(toolbar.querySelector('button[data-action="' + a + '"]')); }
+  // ---------- tool bins + actions (delegated across the whole UI) ----------
+  var bin = document.querySelector('.bin');
+  function clearActive() { if (bin) bin.querySelectorAll('.bin-item').forEach(function (b) { b.classList.remove('active'); }); }
+  function setActiveEl(b) { clearActive(); if (b && b.classList && b.classList.contains('bin-item')) b.classList.add('active'); }
+  function setActiveAction(a) { setActiveEl(bin ? bin.querySelector('[data-action="' + a + '"]') : null); }
+  function rotateSelected() {
+    if (!state.sel || state.sel.kind !== 'part') return;
+    var p = byId(state.sel.id); if (!p) return;
+    var nr = (p.rot + 1) % 4, legs = validLegs(p.type, holesById[p.anchor], nr, p.id);
+    if (legs) { pushHistory(); p.rot = nr; p.legHoles = legs; save(); render(); }
+  }
 
-  toolbar.addEventListener('click', function (e) {
+  document.body.addEventListener('click', function (e) {
     var b = e.target.closest('[data-action]'); if (!b) return;
     var act = b.getAttribute('data-action');
     if (act === 'select') { state.tool = 'select'; state.placing = null; state.wireDraft = null; document.body.classList.remove('placing'); setActiveEl(b); }
@@ -516,9 +609,12 @@
     else if (act === 'undo') { undo(); return; }
     else if (act === 'redo') { redo(); return; }
     else if (act === 'fit') { fitView(); return; }
-    else if (act === 'export') exportJSON();
-    else if (act === 'import') document.getElementById('file').click();
-    else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); } }
+    else if (act === 'zoomin') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 0.83); return; }
+    else if (act === 'zoomout') { zoomAt(view.x + view.w / 2, view.y + view.h / 2, 1.2); return; }
+    else if (act === 'rotate-sel') { rotateSelected(); return; }
+    else if (act === 'export') { exportJSON(); return; }
+    else if (act === 'import') { document.getElementById('file').click(); return; }
+    else if (act === 'clear') { if (window.confirm('Clear the whole layout?')) { pushHistory(); state.parts = []; state.wires = []; state.sel = null; state.placing = null; state.wireDraft = null; save(); render(); } return; }
     render();
   });
   document.getElementById('wireColor').addEventListener('input', function (e) { wireColor = e.target.value; });
