@@ -316,6 +316,7 @@
     var rect = svg.getBoundingClientRect();
     view.x = pan.vx - (e.clientX - pan.sx) * (view.w / rect.width);
     view.y = pan.vy - (e.clientY - pan.sy) * (view.h / rect.height);
+    if (!pan.moved && Math.abs(e.clientX - pan.sx) + Math.abs(e.clientY - pan.sy) > 3) pan.moved = true;
     applyView();
   }
   function pinchPair() { var ids = Object.keys(pointers); return [pointers[ids[0]], pointers[ids[1]]]; }
@@ -674,16 +675,20 @@
     }
     var wireEl = e.target.closest && e.target.closest('[data-wire-id]');
     if (wireEl) { state.sel = { kind: 'wire', id: wireEl.getAttribute('data-wire-id') }; state.multi = []; render(); return; }
-    // empty space -> start a marquee (a click with no drag deselects)
-    state.sel = null; state.multi = [];
-    marquee = { x0: lastPointer.x, y0: lastPointer.y, x1: lastPointer.x, y1: lastPointer.y, moved: false };
-    render();
+    // empty space: plain drag pans the canvas; Shift+drag marquee-selects; a click with no drag deselects
+    if (e.shiftKey) {
+      marquee = { x0: lastPointer.x, y0: lastPointer.y, x1: lastPointer.x, y1: lastPointer.y, moved: false };
+      render(); return;
+    }
+    pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y, fromEmpty: true };
+    document.body.classList.add('panning');
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
   });
 
   window.addEventListener('pointerup', function (e) {
     delete pointers[e.pointerId];
     if (pinch && Object.keys(pointers).length < 2) pinch = null;
-    if (pan) { pan = null; document.body.classList.remove('panning'); }
+    if (pan) { var panClick = pan.fromEmpty && !pan.moved; pan = null; document.body.classList.remove('panning'); if (panClick) { state.sel = null; state.multi = []; render(); } }
     if (marquee) {
       if (marquee.moved) {
         var rx0 = Math.min(marquee.x0, marquee.x1), rx1 = Math.max(marquee.x0, marquee.x1);

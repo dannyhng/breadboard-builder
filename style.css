@@ -93,9 +93,9 @@ body {
     linear-gradient(90deg, var(--grid) 1px, transparent 1px);
   background-size: 22px 22px;
 }
-#board { width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
+#board { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 body.placing #board { cursor: copy; }
-body.panning #board { cursor: grabbing; }
+body.panning #board, body.panning #board * { cursor: grabbing; }
 body.wiring #board { cursor: crosshair; }
 
 /* ---------- right dock ---------- */
