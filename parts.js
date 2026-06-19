@@ -251,9 +251,9 @@
     mk('rect', { x: bx, y: by, width: bw, height: bh, rx: 4, fill: '#1c1c1c', stroke: '#000', 'stroke-width': 0.8, filter: SOFT });
     var dcx = bx + bw / 2, dcy = by + bh / 2;
     var dw = Math.min(bw * 0.28, 26), dh = Math.min(bh * 0.30, 28), th = 3.2;
-    var on = '#dd3322', off = '#3a3a3a';
+    var on = '#dd3322', off = '#3a3a3a', simOn = !!(opts && opts._sim); // not driven by the sim, so show dark when powered
     function bar(x1, y1, x2, y2, lit) {
-      mk('rect', { x: Math.min(x1, x2) - th / 2, y: Math.min(y1, y2) - th / 2, width: Math.abs(x2 - x1) + th, height: Math.abs(y2 - y1) + th, rx: th / 2, fill: lit ? on : off });
+      mk('rect', { x: Math.min(x1, x2) - th / 2, y: Math.min(y1, y2) - th / 2, width: Math.abs(x2 - x1) + th, height: Math.abs(y2 - y1) + th, rx: th / 2, fill: (lit && !simOn) ? on : off });
     }
     var T = dcy - dh, M = dcy, B = dcy + dh, Lx = dcx - dw, Rx = dcx + dw;
     bar(Lx, T, Rx, T, true);   // A
@@ -262,8 +262,8 @@
     bar(Lx, B, Rx, B, true);   // D
     bar(Lx, M, Lx, B, false);  // E
     bar(Lx, T, Lx, M, true);   // F
-    bar(Lx, M, Rx, M, true);   // G  -> lit segments read "5"
-    mk('circle', { cx: flip ? (Lx - 5) : (Rx + 5), cy: B, r: 2.2, fill: on });
+    bar(Lx, M, Rx, M, true);   // G  -> sample "5" when Power is off
+    mk('circle', { cx: flip ? (Lx - 5) : (Rx + 5), cy: B, r: 2.2, fill: simOn ? off : on });
   }
   function drawL293(mk, coords, opts) { drawDIP(mk, coords, opts, 'L293D'); }
 
@@ -273,9 +273,9 @@
     var bx = b.minX - 3, bw = (b.maxX - b.minX) + 6, by = b.minY - 14, bh = (b.maxY - b.minY) + 28;
     coords.forEach(function (c) { var ey = c.y < midY ? by : by + bh; mk('rect', { x: c.x - 1.5, y: Math.min(c.y, ey), width: 3, height: Math.abs(c.y - ey) + 1, fill: '#9a9a9a' }); });
     mk('rect', { x: bx, y: by, width: bw, height: bh, rx: 4, fill: '#1c1c1c', stroke: '#000', 'stroke-width': 0.8, filter: SOFT });
-    var on = '#dd3322', off = '#3a3a3a', th = 2.4, pad = 7, n = 4;
+    var on = '#dd3322', off = '#3a3a3a', th = 2.4, pad = 7, n = 4, simOn = !!(opts && opts._sim);
     var cellW = (bw - 2 * pad) / n, dh = Math.min(bh * 0.30, 22), dw = Math.min(cellW * 0.30, 8), dcy = by + bh / 2;
-    function bar(x1, y1, x2, y2, lit) { mk('rect', { x: Math.min(x1, x2) - th / 2, y: Math.min(y1, y2) - th / 2, width: Math.abs(x2 - x1) + th, height: Math.abs(y2 - y1) + th, rx: th / 2, fill: lit ? on : off }); }
+    function bar(x1, y1, x2, y2, lit) { mk('rect', { x: Math.min(x1, x2) - th / 2, y: Math.min(y1, y2) - th / 2, width: Math.abs(x2 - x1) + th, height: Math.abs(y2 - y1) + th, rx: th / 2, fill: (lit && !simOn) ? on : off }); }
     var digits = [[0, 1, 1, 0, 0, 0, 0], [1, 1, 0, 1, 1, 0, 1], [1, 1, 1, 1, 0, 0, 1], [0, 1, 1, 0, 0, 1, 1]]; // 1 2 3 4 as A,B,C,D,E,F,G
     for (var i = 0; i < n; i++) {
       var dcx = bx + pad + cellW * i + cellW / 2, T = dcy - dh, M = dcy, B2 = dcy + dh, Lx = dcx - dw, Rx = dcx + dw, g = digits[i];

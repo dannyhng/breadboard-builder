@@ -419,24 +419,55 @@
     // find() -- two pins legitimately tied together by an external wire are not a short.
     state.parts.forEach(function (p) {
       if (!PARTS[p.type].straddle) return;
-      var seen = {}, bad = false;
-      p.legHoles.forEach(function (hid) { var h = holesById[hid]; if (!h) return; if (seen[h.node]) bad = true; seen[h.node] = true; });
-      if (bad) viol('err', 'shorted_pins', null, (p.label || PARTS[p.type].label) + ' has pins shorted together.', 'Place it straddling the center ravine so its two rows sit on opposite strips.', [p.id]);
+      var seen = {}, badNet = null;
+      p.legHoles.forEach(function (hid) { var h = holesById[hid]; if (!h) return; if (seen[h.node]) badNet = find(h.node); seen[h.node] = true; });
+      if (badNet != null) viol('err', 'shorted_pins', badNet, (p.label || PARTS[p.type].label) + ' has pins shorted together.', 'Place it straddling the center ravine so its two rows sit on opposite strips.', [p.id]);
     });
 
-    // LED missing-resistor / reversed (supply = + rails & 5V/3V3/VIN; ground = - rails & GND)
-    var supRoots = ['rail-top-plus', 'rail-bot-plus', 'ARD-5V', 'ARD-3V3', 'ARD-VIN'].map(find);
-    var gndRoots = ['rail-top-minus', 'rail-bot-minus', 'ARD-GND', 'ARD-GND2', 'ARD-GND3'].map(find);
-    function inSet(set, r) { return set.indexOf(r) >= 0; }
+    // ---- conduction reachability: shared by the reversed-LED ERC and the power sim ----
+    // sources = supply pins/rails (digital pins are assumed driven HIGH); grounds = GND/- rails.
+    var srcRoots = {}, gndRoots = {};
+    function markSrc(n) { srcRoots[find(n)] = true; }
+    function markGnd(n) { gndRoots[find(n)] = true; }
+    markSrc('rail-top-plus'); markSrc('rail-bot-plus');
+    ['ARD-5V', 'ARD-3V3', 'ARD-VIN', 'ARD-IOREF'].forEach(function (p) { if (ardPins[p]) markSrc(p); });
+    for (var dpin = 0; dpin <= 13; dpin++) { if (ardPins['ARD-D' + dpin]) markSrc('ARD-D' + dpin); }
+    markGnd('rail-top-minus'); markGnd('rail-bot-minus');
+    ['ARD-GND', 'ARD-GND2', 'ARD-GND3'].forEach(function (p) { if (ardPins[p]) markGnd(p); });
+    var biEdges = [], dlist = [];
+    state.parts.forEach(function (p) {
+      var hs = p.legHoles.map(function (id) { return holesById[id]; });
+      if (hs.some(function (h) { return !h; })) return;
+      if (p.type === 'resistor' || p.type === 'potentiometer' || p.type === 'buzzer' ||
+          ((p.type === 'button' || p.type === 'tiltswitch') && p.pressed)) {
+        for (var i = 0; i < hs.length; i++) for (var j = i + 1; j < hs.length; j++) biEdges.push([find(hs[i].node), find(hs[j].node)]);
+      } else if (p.type === 'led' || p.type === 'diode') {
+        var an = p.flip ? hs[1] : hs[0], ca = p.flip ? hs[0] : hs[1];
+        dlist.push({ id: p.id, anode: find(an.node), cathode: find(ca.node) });
+      }
+    });
+    function flood(seed, fwd) {
+      var reach = {}; for (var r in seed) reach[r] = true;
+      var changed = true;
+      while (changed) {
+        changed = false;
+        for (var i = 0; i < biEdges.length; i++) { var e = biEdges[i]; if (reach[e[0]] && !reach[e[1]]) { reach[e[1]] = true; changed = true; } if (reach[e[1]] && !reach[e[0]]) { reach[e[0]] = true; changed = true; } }
+        for (var k = 0; k < dlist.length; k++) { var d = dlist[k]; if (fwd) { if (reach[d.anode] && !reach[d.cathode]) { reach[d.cathode] = true; changed = true; } } else { if (reach[d.cathode] && !reach[d.anode]) { reach[d.anode] = true; changed = true; } } }
+      }
+      return reach;
+    }
+    var srcReach = flood(srcRoots, true), gndReach = flood(gndRoots, false);
+
+    // LED missing-resistor (directly across power) + backwards (anode reaches ground, even through a resistor)
     state.parts.forEach(function (p) {
       if (p.type !== 'led') return;
       var h0 = holesById[p.legHoles[0]], h1 = holesById[p.legHoles[1]];
       if (!h0 || !h1 || h0.node === h1.node) return;
-      var ra = find(p.flip ? h1.node : h0.node), rc = find(p.flip ? h0.node : h1.node);
-      if ((inSet(supRoots, ra) && inSet(gndRoots, rc)) || (inSet(gndRoots, ra) && inSet(supRoots, rc))) {
-        viol('warn', 'led_no_resistor', find(h0.node), (p.label || 'LED') + ' has no current-limiting resistor (directly across power).', 'Add a 220-330 ohm resistor in series.', [p.id]);
-        if (inSet(gndRoots, ra) && inSet(supRoots, rc)) viol('warn', 'led_reversed', find(h0.node), (p.label || 'LED') + ' looks backwards (cathode toward +).', 'Flip the LED so its anode faces +.', [p.id]);
-      }
+      var ra = find(p.flip ? h1.node : h0.node), rc = find(p.flip ? h0.node : h1.node); // ra = anode net, rc = cathode net
+      if ((srcRoots[ra] && gndRoots[rc]) || (gndRoots[ra] && srcRoots[rc]))
+        viol('warn', 'led_no_resistor', ra, (p.label || 'LED') + ' has no current-limiting resistor (directly across power).', 'Add a 220-330 ohm resistor in series.', [p.id]);
+      if (gndReach[ra] && srcReach[rc] && !(srcReach[ra] && gndReach[rc]))
+        viol('warn', 'led_reversed', ra, (p.label || 'LED') + ' looks backwards (cathode toward +).', 'Flip the LED so its anode faces +.', [p.id]);
     });
 
     // connector status: count active connectors per net (part legs + wired Arduino pins).
@@ -451,42 +482,9 @@
       if (ardPins[w.to]) bumpNet(find(w.to));
     });
 
-    // ---- L2 sim: simplified DC power flow that lights the LEDs ----
+    // ---- power sim: light LEDs that form a real source -> ... -> ground loop (reuses the flood above) ----
     var sim = null;
     if (state.sim) {
-      var srcRoots = {}, gndRoots = {};
-      function markSrc(n) { srcRoots[find(n)] = true; }
-      function markGnd(n) { gndRoots[find(n)] = true; }
-      markSrc('rail-top-plus'); markSrc('rail-bot-plus');
-      ['ARD-5V', 'ARD-3V3', 'ARD-VIN', 'ARD-IOREF'].forEach(function (p) { if (ardPins[p]) markSrc(p); });
-      for (var dpin = 0; dpin <= 13; dpin++) { if (ardPins['ARD-D' + dpin]) markSrc('ARD-D' + dpin); } // assume digital outputs are driven HIGH
-      markGnd('rail-top-minus'); markGnd('rail-bot-minus');
-      ['ARD-GND', 'ARD-GND2', 'ARD-GND3'].forEach(function (p) { if (ardPins[p]) markGnd(p); });
-
-      var biEdges = [], dlist = [];
-      state.parts.forEach(function (p) {
-        var hs = p.legHoles.map(function (id) { return holesById[id]; });
-        if (hs.some(function (h) { return !h; })) return;
-        if (p.type === 'resistor' || p.type === 'potentiometer' || p.type === 'buzzer' ||
-            ((p.type === 'button' || p.type === 'tiltswitch') && p.pressed)) {
-          // bidirectional loads (and a closed switch) pass current both ways
-          for (var i = 0; i < hs.length; i++) for (var j = i + 1; j < hs.length; j++) biEdges.push([find(hs[i].node), find(hs[j].node)]);
-        } else if (p.type === 'led' || p.type === 'diode') {
-          var an = p.flip ? hs[1] : hs[0], ca = p.flip ? hs[0] : hs[1];
-          dlist.push({ id: p.id, anode: find(an.node), cathode: find(ca.node) });
-        }
-      });
-      function flood(seed, fwd) {
-        var reach = {}; for (var r in seed) reach[r] = true;
-        var changed = true;
-        while (changed) {
-          changed = false;
-          for (var i = 0; i < biEdges.length; i++) { var e = biEdges[i]; if (reach[e[0]] && !reach[e[1]]) { reach[e[1]] = true; changed = true; } if (reach[e[1]] && !reach[e[0]]) { reach[e[0]] = true; changed = true; } }
-          for (var k = 0; k < dlist.length; k++) { var d = dlist[k]; if (fwd) { if (reach[d.anode] && !reach[d.cathode]) { reach[d.cathode] = true; changed = true; } } else { if (reach[d.cathode] && !reach[d.anode]) { reach[d.anode] = true; changed = true; } } }
-        }
-        return reach;
-      }
-      var srcReach = flood(srcRoots, true), gndReach = flood(gndRoots, false);
       var lit = {}, rgbLit = {}, active = {};
       dlist.forEach(function (d) { if (srcReach[d.anode] && gndReach[d.cathode]) lit[d.id] = true; });
       state.parts.forEach(function (p) {
@@ -757,7 +755,7 @@
   svg.addEventListener('pointerdown', function (e) {
     pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
     var _cm = document.getElementById('ctxmenu'); if (_cm && !_cm.hidden) { hideCtx(); delete pointers[e.pointerId]; return; } // a press while the menu is open just dismisses it
-    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; finishDrag(); marquee = null; try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
+    if (Object.keys(pointers).length >= 2) { startPinch(); pan = null; finishDrag(); marquee = null; wireDrag = null; document.body.classList.remove('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} return; }
     if (spaceDown || e.button === 1) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; document.body.classList.add('panning'); try { svg.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); return; }
     if (e.button === 2) return; // right button -> let the context menu handle it, no select/drag/marquee
     lastPointer = toBoard(e);
@@ -958,9 +956,7 @@
       if (legs) {
         pushHistory();
         var np = { id: state.nextId++, type: p.type, anchor: legs[0], rot: p.rot, legHoles: legs };
-        if (p.value != null) np.value = p.value;
-        if (p.color != null) np.color = p.color;
-        if (p.flip != null) np.flip = p.flip;
+        for (var ck in p) { if (ck === 'id' || ck === 'type' || ck === 'anchor' || ck === 'rot' || ck === 'legHoles' || ck === 'label') continue; np[ck] = p[ck]; } // carry value/color/flip/pressed + any future field
         np.label = nextLabel(p.type);
         state.parts.push(np); state.sel = { kind: 'part', id: np.id }; save(); render();
         return;
@@ -1086,8 +1082,8 @@
   }
   svg.addEventListener('contextmenu', function (e) {
     e.preventDefault();
-    marquee = null; pan = null; document.body.classList.remove('panning'); // abort any in-flight gesture before the menu opens
-    if (drag) { try { svg.releasePointerCapture(drag.pointerId); } catch (_) {} drag = null; }
+    marquee = null; pan = null; wireDrag = null; document.body.classList.remove('panning'); // abort any in-flight gesture before the menu opens
+    if (drag) { try { svg.releasePointerCapture(drag.pointerId); } catch (_) {} finishDrag(); } // commit a real move so undo still works
     var partEl = e.target.closest && e.target.closest('[data-part-id]');
     var wireEl = e.target.closest && e.target.closest('[data-wire-id]');
     var items;
@@ -1190,16 +1186,23 @@
   }
   function validPart(p) { return p.legHoles && PARTS[p.type] && p.legHoles.every(function (id) { return holesById[id]; }); }
   function snapshot() { return { version: 1, parts: state.parts, wires: state.wires, nextId: state.nextId }; }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(snapshot())); } catch (_) {} }
+  // for persistence (autosave + export): strip the transient `pressed` sim toggle so a momentary
+  // circuit test is never baked into the saved/exported layout. In-session undo keeps it (snapshot()).
+  function persistSnapshot() {
+    return { version: 1, nextId: state.nextId, wires: state.wires, parts: state.parts.map(function (p) { if (p.pressed) { var c = Object.assign({}, p); delete c.pressed; return c; } return p; }) };
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(persistSnapshot())); } catch (_) {} }
   function adopt(o) {
     state.parts = (o.parts || []).map(normalizePart).filter(validPart);
-    state.parts.forEach(function (p) { if (!p.label) p.label = nextLabel(p.type); });
     state.wires = (o.wires || []).filter(function (w) { return connXY(w.from) && connXY(w.to); });
-    // float the id counter above every loaded id so freshly placed parts can never collide
+    // float the id counter above every loaded id, then repair any duplicate / non-numeric part ids
     var maxId = 0;
     state.parts.forEach(function (p) { if (typeof p.id === 'number' && p.id > maxId) maxId = p.id; });
     state.wires.forEach(function (w) { var n = +String(w.id).replace(/^w/, ''); if (n > maxId) maxId = n; });
-    state.nextId = Math.max(o.nextId || 0, maxId + 1);
+    var next = maxId + 1, used = {};
+    state.parts.forEach(function (p) { if (typeof p.id !== 'number' || used[p.id]) p.id = next++; used[p.id] = true; });
+    state.parts.forEach(function (p) { if (!p.label) p.label = nextLabel(p.type); });
+    state.nextId = Math.max(o.nextId || 0, next);
   }
 
   // ---------- undo / redo (snapshot history; state is tiny) ----------
@@ -1221,6 +1224,7 @@
   }
   function importData(o) {
     if (!o || o.version !== 1) { window.alert('Unsupported layout version.'); return; }
+    if ((state.parts.length || state.wires.length) && !window.confirm('Replace the current layout with the imported file?')) return;
     pushHistory(); adopt(o);
     state.sel = null; state.multi = []; marquee = null; state.placing = null; state.wireDraft = null;
     document.body.classList.remove('placing');
@@ -1235,7 +1239,7 @@
   }
   function exportJSON() {
     try {
-      var blob = new Blob([JSON.stringify(snapshot(), null, 2)], { type: 'application/json' });
+      var blob = new Blob([JSON.stringify(persistSnapshot(), null, 2)], { type: 'application/json' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a'); a.href = url; a.download = 'breadboard-layout.json';
       document.body.appendChild(a); a.click(); a.remove();
@@ -1267,7 +1271,11 @@
     document.body.classList.toggle('sim-on', state.sim);
   }
 
-  if (!loadSaved()) seedDemo();
+  if (!loadSaved()) {
+    // an unreadable / future-version save must not be silently clobbered by the demo: park the raw bytes first
+    try { var _raw = localStorage.getItem(KEY); if (_raw) localStorage.setItem('breadboard.layout.recover', _raw); } catch (_) {}
+    seedDemo();
+  }
   setActiveAction('select');
   try { var _simPref = localStorage.getItem('bb.sim'); if (_simPref !== null) state.sim = _simPref === '1'; } catch (_) {}
   syncPowerBtn();
